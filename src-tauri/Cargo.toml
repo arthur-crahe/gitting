@@ -1,0 +1,22 @@
+[package]
+name = "gitting"
+version = "0.1.0"
+description = "Desktop app for reviewing local git changes"
+edition = "2021"
+# Toolchain: latest stable Rust (>= 1.85 for gix) — see ../rust-toolchain.toml.
+
+[lib]
+# `name` must match the `app_lib::run()` call in src/main.rs.
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# The git layer (gix backend + thiserror error type) is added when the
+# status/diff/stage commands are implemented — see CLAUDE.md.

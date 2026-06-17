@@ -1,0 +1,11 @@
+# pnpm settings. Single package — no `packages:` globs needed.
+#
+# Since pnpm 10, dependency build scripts are blocked by default; allowlist the
+# ones this stack actually needs to run their install scripts.
+# Note: pnpm >= 11 replaces the `onlyBuiltDependencies` array below with an
+# `allowBuilds:` map (name: true). Switch the spelling if the install step
+# resolves pnpm >= 11. Run `pnpm approve-builds` if a needed native is missing
+# (e.g. esbuild's platform binary may surface as `@esbuild/<os-arch>`).
+onlyBuiltDependencies:
+  - esbuild
+  - "@biomejs/biome"

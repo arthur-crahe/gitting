@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Frontend build output
+dist/
+dist-ssr/
+
+# Rust / Tauri build output
+src-tauri/target/
+
+# Tauri-generated schemas & bindings (produced by tauri-build)
+src-tauri/gen/
+
+# Test / coverage output
+coverage/
+
+# Logs
+*.log
+pnpm-debug.log*
+
+# Local env & OS/editor cruft
+*.local
+.DS_Store
