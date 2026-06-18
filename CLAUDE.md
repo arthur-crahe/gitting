@@ -69,6 +69,10 @@ Frontend dependencies are **installed and pinned** (pnpm 10 — see `pnpm-lock.y
 
 Version constraints to honor: `tauri`/`tauri-build`/`@tauri-apps/cli` share the same **minor**; `gix` needs **Rust ≥ 1.85** (depend on the `gix` facade, not `gix-index`); pnpm ≥ 11 would require Node ≥ 22 and the `allowBuilds` map (this repo is on pnpm 10 → `onlyBuiltDependencies` array).
 
+## Releases & distribution
+
+Installers are **never committed** — they ship as **GitHub Release assets**. `.github/workflows/release.yml` builds them on a matrix (`ubuntu-22.04` for portable `.deb`/`.rpm`/`.AppImage`, `windows-latest` for NSIS `.exe` + MSI) via `tauri-action`, on every `app-v*` tag. Cut a release with the **`/release`** command (`.claude/commands/release.md`): it bumps the version across `tauri.conf.json`/`package.json`/`Cargo.toml`/`Cargo.lock`, runs the gate, commits, tags `app-v<version>`, and pushes. The pipeline then creates a **draft** Release at `…/releases` to review and publish. Build releases only through CI (`ubuntu-22.04`) — never from a dev box, whose newer glibc breaks portability on older distros.
+
 ## Docker — decision: not adopted
 
 No Docker / Compose. Rationale: a Tauri GUI needs a native WebView, windowing and GPU; the **Windows** target cannot be cross-built from a Linux container (it needs an MSVC host + signtool), and the maintained Tauri CI path uses bare runners — so a container would cover at most the Linux test/lint slice while adding a second environment to keep in sync. The `gix` backend is pure Rust (no libgit2/system-git), and Vitest runs fine natively. Reproducibility instead comes from `rust-toolchain.toml`, a pinned Node, and a documented apt one-liner for Tauri's Linux deps. Revisit only if onboarding pain appears — and then a single optional `.devcontainer` scoped to test/lint, not full Docker.
@@ -79,4 +83,6 @@ Desktop **Linux + Windows**, professional use, **no account system**, fully loca
 
 ## `.claude/`
 
-Kept minimal on purpose — no custom slash commands, subagents, or hooks yet. Add them here only when a concrete need appears.
+- `commands/release.md` — the **`/release`** command (bump version everywhere → gate → commit → tag `app-v<version>` → push → pipeline builds the draft Release).
+
+Otherwise kept minimal — add subagents/hooks here only when a concrete need appears.
