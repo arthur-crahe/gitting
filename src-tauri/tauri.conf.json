@@ -24,6 +24,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -32,5 +33,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlGNEI4NTNFMkQxNENCMjAKUldRZ3l4UXRQb1ZMbnpScFVpeFNoTFZncXRFTnI2eEJXelpnSUtnaU1MNWJVd0tTMXJURktEMUsK",
+      "endpoints": ["https://github.com/arthur-crahe/gitting/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

@@ -61,9 +61,15 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing (minisign). Set these as repository secrets — without
+          # them no .sig is produced and clients reject the update. See docs/adr.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: app-v__VERSION__
           releaseName: 'Gitting v__VERSION__'
           releaseBody: "Téléchargez l'installeur correspondant à votre système ci-dessous."
           releaseDraft: true
           prerelease: false
+          # Both NSIS .exe and MSI are built; point the updater manifest at NSIS.
+          updaterJsonPreferNsis: true
