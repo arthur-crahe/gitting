@@ -1,5 +1,6 @@
 import { Container, Flex, Heading, Text } from '@radix-ui/themes'
 import { useEffect } from 'react'
+import { AppVersion } from '../components/app-version'
 import { CheckForUpdatesButton } from '../components/check-for-updates-button'
 import { UpdateNotice } from '../components/update-notice'
 import { useUpdateStore } from '../stores/use-update-store'
@@ -33,6 +34,7 @@ export function App() {
             Revue des changements git locaux.
           </Text>
         </Flex>
+        <AppVersion />
       </Flex>
     </Container>
   )
