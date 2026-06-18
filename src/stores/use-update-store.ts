@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { type AvailableUpdate, checkForUpdate, installUpdate, isTauriRuntime } from '../lib/updater'
+import { isTauriRuntime } from '../lib/runtime'
+import { type AvailableUpdate, checkForUpdate, installUpdate } from '../lib/updater'
 
 /** Lifecycle of the in-app updater, surfaced to the UI. */
 export type UpdatePhase = 'idle' | 'checking' | 'available' | 'downloading' | 'up-to-date' | 'error'

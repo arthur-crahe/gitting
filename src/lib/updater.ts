@@ -27,14 +27,6 @@ export interface DownloadProgress {
 }
 
 /**
- * Whether the code is running inside the Tauri WebView (vs. a plain browser
- * during `pnpm dev`). The updater IPC only exists in the former.
- */
-export function isTauriRuntime(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-}
-
-/**
  * Queries the updater endpoint.
  *
  * @returns the available update, or `null` when already up to date.

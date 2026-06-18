@@ -1,0 +1,255 @@
+/*
+ * Global styles for the desktop shell.
+ *
+ * The app is the window: a custom frameless titlebar (decorations: false) plus
+ * the content area fill the surface edge to edge. Loaded after Radix Themes'
+ * stylesheet so these resets win and so the Radix CSS variables (--gray-*,
+ * --accent-*, --color-background, --radius-*) are available below.
+ */
+
+:root {
+  --titlebar-height: 38px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  /* Content regions manage their own scrolling; the window itself never scrolls. */
+  overflow: hidden;
+  background-color: var(--color-background);
+}
+
+/* Make the Radix Theme wrapper fill the window so the app owns every pixel. */
+#root > .radix-themes {
+  height: 100%;
+  /* Suppress rubber-band overscroll — this is an app surface, not a web page. */
+  overscroll-behavior: none;
+}
+
+/* ── App shell layout ─────────────────────────────────────────────────────── */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* ── Custom titlebar — seamless VSCode-style action bar ───────────────────── */
+
+/*
+ * Three zones: a left identity/breadcrumb cluster (also a drag handle), a
+ * flexible centre that is pure drag surface, and a right cluster of app actions
+ * followed by the window controls. No border and no distinct background, so the
+ * bar fuses into the content below as one continuous surface.
+ */
+.titlebar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  height: var(--titlebar-height);
+  padding-inline: 10px 6px;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.titlebar__zone {
+  display: flex;
+  align-items: center;
+}
+
+.titlebar__zone--left {
+  flex: 0 1 auto;
+  min-width: 0;
+  gap: 7px;
+}
+
+/* The left zone doubles as a drag handle; its text never steals the target. */
+.titlebar__zone--left > * {
+  pointer-events: none;
+}
+
+.titlebar__zone--right {
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+/* Flexible middle: keeps the window draggable even if the clusters grow. */
+.titlebar__drag {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 24px;
+}
+
+.titlebar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--font-size-1);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--gray-12);
+  white-space: nowrap;
+}
+
+.titlebar__brand-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-9);
+}
+
+.titlebar__crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: var(--font-size-1);
+  color: var(--gray-a10);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.titlebar__crumb-sep {
+  color: var(--gray-a6);
+}
+
+.titlebar__winctls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+/* ── Window control buttons ───────────────────────────────────────────────── */
+
+.winctl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-2);
+  background: transparent;
+  color: var(--gray-a11);
+  cursor: default;
+  transition:
+    background-color 90ms ease,
+    color 90ms ease;
+}
+
+.winctl:hover {
+  background: var(--gray-a4);
+  color: var(--gray-12);
+}
+
+.winctl:active {
+  background: var(--gray-a5);
+}
+
+.winctl--close:hover {
+  background: var(--red-9);
+  color: #fff;
+}
+
+.winctl--close:active {
+  background: var(--red-10);
+}
+
+.winctl svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+/* ── Resize grips (frameless windows lose the native resize border) ───────── */
+
+.win-resizers {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.win-resizer {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.win-resizer--n {
+  top: 0;
+  left: 9px;
+  right: 9px;
+  height: 5px;
+  cursor: ns-resize;
+}
+
+.win-resizer--s {
+  bottom: 0;
+  left: 9px;
+  right: 9px;
+  height: 5px;
+  cursor: ns-resize;
+}
+
+.win-resizer--w {
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 5px;
+  cursor: ew-resize;
+}
+
+.win-resizer--e {
+  right: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 5px;
+  cursor: ew-resize;
+}
+
+.win-resizer--nw {
+  top: 0;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  cursor: nwse-resize;
+}
+
+.win-resizer--ne {
+  top: 0;
+  right: 0;
+  width: 9px;
+  height: 9px;
+  cursor: nesw-resize;
+}
+
+.win-resizer--sw {
+  bottom: 0;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  cursor: nesw-resize;
+}
+
+.win-resizer--se {
+  bottom: 0;
+  right: 0;
+  width: 9px;
+  height: 9px;
+  cursor: nwse-resize;
+}

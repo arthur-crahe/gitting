@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../lib/updater', () => ({
+vi.mock('../lib/runtime', () => ({
   isTauriRuntime: () => true,
+}))
+
+vi.mock('../lib/updater', () => ({
   checkForUpdate: vi.fn(),
   installUpdate: vi.fn(),
 }))
