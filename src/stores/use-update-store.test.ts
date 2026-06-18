@@ -35,7 +35,7 @@ describe('useUpdateStore', () => {
     })
   })
 
-  it('moves to "available" when the endpoint offers a newer version', async () => {
+  it('surfaces an available update from a silent launch check', async () => {
     mockedCheck.mockResolvedValue(fakeUpdate())
     await useUpdateStore.getState().check()
     const state = useUpdateStore.getState()
@@ -43,15 +43,29 @@ describe('useUpdateStore', () => {
     expect(state.available?.version).toBe('6.0.0')
   })
 
-  it('stays idle when already up to date', async () => {
+  it('stays idle when a silent check is up to date', async () => {
     mockedCheck.mockResolvedValue(null)
     await useUpdateStore.getState().check()
     expect(useUpdateStore.getState().phase).toBe('idle')
   })
 
-  it('surfaces a check error', async () => {
-    mockedCheck.mockRejectedValue(new Error('network down'))
+  it('confirms up-to-date on a manual check', async () => {
+    mockedCheck.mockResolvedValue(null)
+    await useUpdateStore.getState().check(true)
+    expect(useUpdateStore.getState().phase).toBe('up-to-date')
+  })
+
+  it('stays silent when a launch check fails', async () => {
+    mockedCheck.mockRejectedValue(new Error('offline'))
     await useUpdateStore.getState().check()
+    const state = useUpdateStore.getState()
+    expect(state.phase).toBe('idle')
+    expect(state.error).toBeNull()
+  })
+
+  it('surfaces an error on a manual check failure', async () => {
+    mockedCheck.mockRejectedValue(new Error('network down'))
+    await useUpdateStore.getState().check(true)
     const state = useUpdateStore.getState()
     expect(state.phase).toBe('error')
     expect(state.error).toBe('network down')

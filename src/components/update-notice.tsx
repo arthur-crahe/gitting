@@ -1,4 +1,4 @@
-import { Button, Card, Flex, Text } from '@radix-ui/themes'
+import { Button, Card, Flex, Progress, Text } from '@radix-ui/themes'
 import { useUpdateStore } from '../stores/use-update-store'
 
 /**
@@ -14,7 +14,8 @@ function percent(downloaded: number, total: number): number | null {
 
 /**
  * Inline notice for the in-app updater: offers an available update, shows
- * download progress, or reports an error. Renders nothing while idle/checking.
+ * download progress, confirms an up-to-date manual check, or reports an error.
+ * Renders nothing while idle or while a (silent) check is in flight.
  */
 export function UpdateNotice() {
   const phase = useUpdateStore((s) => s.phase)
@@ -54,7 +55,25 @@ export function UpdateNotice() {
     const pct = percent(downloaded, total)
     return (
       <Card>
-        <Text size="2">Téléchargement de la mise à jour{pct !== null ? ` (${pct} %)` : '…'}</Text>
+        <Flex direction="column" gap="2">
+          <Text size="2">Téléchargement de la mise à jour{pct !== null ? ` (${pct} %)` : '…'}</Text>
+          <Progress value={pct ?? undefined} />
+        </Flex>
+      </Card>
+    )
+  }
+
+  if (phase === 'up-to-date') {
+    return (
+      <Card>
+        <Flex align="center" justify="between" gap="3">
+          <Text size="2" color="gray">
+            Gitting est à jour.
+          </Text>
+          <Button size="1" variant="soft" color="gray" onClick={dismiss}>
+            Fermer
+          </Button>
+        </Flex>
       </Card>
     )
   }

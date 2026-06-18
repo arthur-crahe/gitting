@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { type AvailableUpdate, checkForUpdate, installUpdate, isTauriRuntime } from '../lib/updater'
 
 /** Lifecycle of the in-app updater, surfaced to the UI. */
-export type UpdatePhase = 'idle' | 'checking' | 'available' | 'downloading' | 'error'
+export type UpdatePhase = 'idle' | 'checking' | 'available' | 'downloading' | 'up-to-date' | 'error'
 
 /** State and actions for checking, downloading and installing app updates. */
 export interface UpdateStoreState {
@@ -16,8 +16,13 @@ export interface UpdateStoreState {
   total: number
   /** Human-readable error message when {@link phase} is `'error'`. */
   error: string | null
-  /** Query the endpoint. No-ops outside Tauri or while already busy. */
-  check: () => Promise<void>
+  /**
+   * Query the endpoint. A `manual` check (user-initiated) confirms when already
+   * up to date and surfaces errors; a silent launch check (`manual` false, the
+   * default) only ever reveals an available update — it stays quiet when the app
+   * is current or the check fails (e.g. offline). No-ops outside Tauri/while busy.
+   */
+  check: (manual?: boolean) => Promise<void>
   /** Download, install and relaunch the available update. */
   install: () => Promise<void>
   /** Clear the current notice until the next check. */
@@ -25,8 +30,9 @@ export interface UpdateStoreState {
 }
 
 /**
- * Store driving the update notice. A single check is triggered on app launch;
- * the user opts in to installing. Kept inert in a plain browser (no Tauri IPC).
+ * Store driving the update notice. A silent check runs on app launch; the user
+ * can re-check on demand and opts in to installing. Kept inert in a plain
+ * browser (no Tauri IPC).
  */
 export const useUpdateStore = create<UpdateStoreState>((set, get) => ({
   phase: 'idle',
@@ -35,7 +41,7 @@ export const useUpdateStore = create<UpdateStoreState>((set, get) => ({
   total: 0,
   error: null,
 
-  check: async () => {
+  check: async (manual = false) => {
     if (!isTauriRuntime()) {
       return
     }
@@ -46,9 +52,16 @@ export const useUpdateStore = create<UpdateStoreState>((set, get) => ({
     set({ phase: 'checking', error: null })
     try {
       const update = await checkForUpdate()
-      set(update ? { phase: 'available', available: update } : { phase: 'idle', available: null })
+      if (update) {
+        set({ phase: 'available', available: update })
+      } else {
+        // Up to date: confirm on a manual check, stay silent on launch.
+        set({ phase: manual ? 'up-to-date' : 'idle', available: null })
+      }
     } catch (error) {
-      set({ phase: 'error', error: toMessage(error) })
+      // Surface failures only when the user asked; a silent launch check that
+      // fails (e.g. offline) returns quietly to idle.
+      set(manual ? { phase: 'error', error: toMessage(error) } : { phase: 'idle' })
     }
   },
 
