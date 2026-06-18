@@ -33,6 +33,7 @@ vite.config.ts       Vite + Tauri dev/build
 vitest.config.ts     unit tests (jsdom), merges the Vite config
 index.html           Vite entry
 rust-toolchain.toml  Rust = stable (>= 1.85 for gix)
+docs/adr/            architecture decision records (MADR)
 src/                 frontend (feature-based) — see src/CLAUDE.md
 src-tauri/           Rust/Tauri backend — see src-tauri/CLAUDE.md
 ```
