@@ -6,7 +6,7 @@ import { RowProvider } from './row-context'
 import { ValidateButton } from './validate-button'
 
 function renderWith(section: 'staged' | 'unstaged', act: RowActions['act']) {
-  const actions: RowActions = { selected: null, select: vi.fn(), act }
+  const actions: RowActions = { select: vi.fn(), act }
   return render(
     <Theme>
       <RowProvider value={actions}>

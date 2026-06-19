@@ -11,7 +11,7 @@ import { useViewStore, type ViewMode } from '../../stores/use-view-store'
 import { RepoPicker } from '../repo/repo-picker'
 import { changeKindGlyph } from './change-kind'
 import { DiffPanel } from './diff/diff-panel'
-import { isSelected, type RowActions, RowProvider, useRowActions } from './row-context'
+import { type RowActions, RowProvider, useIsSelected, useRowActions } from './row-context'
 import { SidebarResizer } from './sidebar-resizer'
 import { StatusGlyph } from './status-glyph'
 import { FileTree } from './tree-view'
@@ -20,16 +20,18 @@ import { ViewModeToggle } from './view-mode-toggle'
 
 /** A single changed file: a clickable select button plus its validate action. */
 function FileRow({ section, entry }: { section: DiffSection; entry: StatusEntry }) {
-  const { selected, select } = useRowActions()
+  const { select } = useRowActions()
+  const selected = useIsSelected(section, entry.path)
   const glyph = changeKindGlyph(entry.kind)
   const { dir, name } = splitPath(entry.path)
   return (
-    <div className="file-row" data-selected={isSelected(selected, section, entry.path)}>
+    <div className="file-row" data-selected={selected}>
       <button
         type="button"
         className="file-row__select"
         onClick={() => select(section, entry.path)}
         title={`${glyph.label} — ${entry.path}`}
+        aria-current={selected ? 'true' : undefined}
       >
         <StatusGlyph kind={entry.kind} />
         <span className="file-row__path">
@@ -111,14 +113,12 @@ export function ReviewView() {
   const error = useRepoStore((s) => s.error)
   const mode = useViewStore((s) => s.mode)
   const sidebarWidth = useSidebarStore((s) => s.width)
-  const selected = useDiffStore((s) => s.selected)
   const select = useDiffStore((s) => s.select)
   const sidebarRef = useRef<HTMLDivElement>(null)
 
   const root = info?.root ?? null
   const actions = useMemo<RowActions>(
     () => ({
-      selected,
       select: (section, path) => {
         if (root) {
           void select(root, { section, path })
@@ -128,7 +128,7 @@ export function ReviewView() {
         void (section === 'unstaged' ? stage(path) : unstage(path))
       },
     }),
-    [selected, root, select, stage, unstage],
+    [root, select, stage, unstage],
   )
 
   if (!status) {

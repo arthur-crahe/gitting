@@ -3,8 +3,8 @@ import { Chevron } from '../../components/icons'
 import type { StatusEntry } from '../../lib/git'
 import type { DiffSection } from '../../stores/use-diff-store'
 import { changeKindGlyph } from './change-kind'
-import { buildFileTree, type TreeNode } from './file-tree'
-import { isSelected, useRowActions } from './row-context'
+import { buildFileTree, type FileNode, type TreeNode } from './file-tree'
+import { useIsSelected, useRowActions } from './row-context'
 import { StatusGlyph } from './status-glyph'
 import { ValidateButton } from './validate-button'
 
@@ -35,31 +35,40 @@ interface RowProps {
   onToggle: (path: string) => void
 }
 
+/** A file leaf: the select target with its status glyph and validate action. */
+function TreeFile({
+  node,
+  depth,
+  section,
+}: {
+  node: FileNode
+  depth: number
+  section: DiffSection
+}) {
+  const { select } = useRowActions()
+  const selected = useIsSelected(section, node.entry.path)
+  const glyph = changeKindGlyph(node.entry.kind)
+  return (
+    <div className="tree-file" style={{ paddingLeft: inset(depth) }} data-selected={selected}>
+      <button
+        type="button"
+        className="tree-file__select"
+        onClick={() => select(section, node.entry.path)}
+        title={`${glyph.label} — ${node.entry.path}`}
+        aria-current={selected ? 'true' : undefined}
+      >
+        <StatusGlyph kind={node.entry.kind} />
+        <span className="tree-file__name">{node.name}</span>
+      </button>
+      <ValidateButton section={section} path={node.entry.path} />
+    </div>
+  )
+}
+
 /** One tree row: a collapsible directory (with its children) or a file leaf. */
 function NodeRow({ node, depth, section, collapsed, onToggle }: RowProps) {
-  const { selected, select } = useRowActions()
-
   if (node.type === 'file') {
-    const { entry } = node
-    const glyph = changeKindGlyph(entry.kind)
-    return (
-      <div
-        className="tree-file"
-        style={{ paddingLeft: inset(depth) }}
-        data-selected={isSelected(selected, section, entry.path)}
-      >
-        <button
-          type="button"
-          className="tree-file__select"
-          onClick={() => select(section, entry.path)}
-          title={`${glyph.label} — ${entry.path}`}
-        >
-          <StatusGlyph kind={entry.kind} />
-          <span className="tree-file__name">{node.name}</span>
-        </button>
-        <ValidateButton section={section} path={entry.path} />
-      </div>
-    )
+    return <TreeFile node={node} depth={depth} section={section} />
   }
 
   const open = !collapsed.has(node.path)
@@ -96,8 +105,9 @@ function NodeRow({ node, depth, section, collapsed, onToggle }: RowProps) {
  * Tree layout of a section's changed files: collapsible directories (compacted
  * VSCode-style by {@link buildFileTree}) with file leaves carrying their status
  * glyph. Everything is expanded by default; collapsed directories are tracked in
- * component-local state, so the set resets whenever the component remounts — on a
- * section toggle, a switch back to the list, or a change in entries.
+ * component-local state that persists across an entries change (a stage/unstage)
+ * and resets only when the component unmounts — on a section toggle or a switch
+ * back to the list.
  */
 export function FileTree({
   entries,

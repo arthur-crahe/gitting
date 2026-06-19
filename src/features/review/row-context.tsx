@@ -1,15 +1,18 @@
 import { createContext, useContext } from 'react'
 import type { DiffSection, DiffSelection } from '../../stores/use-diff-store'
+import { useDiffStore } from '../../stores/use-diff-store'
 
 /**
- * Row interactions shared by the flat list and the tree: which file is open,
- * how to open one, and how to validate/unvalidate one. Provided once by the
- * review surface so both layouts (and the recursive tree rows) behave the same
- * without prop drilling.
+ * Row interactions shared by the flat list and the tree: how to open a file and
+ * how to validate/unvalidate one. Provided once by the review surface so both
+ * layouts (and the recursive tree rows) behave the same without prop drilling.
+ *
+ * The current selection is intentionally **not** here: a row reads only its own
+ * open/closed state via {@link useIsSelected}, so opening a file re-renders just
+ * the two rows whose selected-ness flips rather than the whole (non-virtualized)
+ * list.
  */
 export interface RowActions {
-  /** The file currently open in the diff panel, if any. */
-  readonly selected: DiffSelection | null
   /** Open `path` (in `section`) in the diff panel. */
   readonly select: (section: DiffSection, path: string) => void
   /** Validate (stage) or un-validate (unstage) `path`, depending on `section`. */
@@ -37,4 +40,12 @@ export function isSelected(
   path: string,
 ): boolean {
   return selected?.section === section && selected.path === path
+}
+
+/**
+ * Subscribes a single row to just its own selected-ness (a derived boolean), so
+ * it re-renders only when that file's open/closed state actually changes.
+ */
+export function useIsSelected(section: DiffSection, path: string): boolean {
+  return useDiffStore((s) => isSelected(s.selected, section, path))
 }
