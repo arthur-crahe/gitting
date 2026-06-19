@@ -23,6 +23,18 @@ pub enum GitError {
     #[error("échec de la lecture du statut du dépôt : {0}")]
     Status(String),
 
+    // `Diff` and `Index` gain their first construction site in `git/diff.rs`
+    // and `git/index_write.rs`; the `allow(dead_code)` is removed there.
+    /// Computing a file diff (blob comparison / hunk extraction) failed.
+    #[allow(dead_code)]
+    #[error("échec du calcul du diff : {0}")]
+    Diff(String),
+
+    /// Writing the index (staging / unstaging a file) failed.
+    #[allow(dead_code)]
+    #[error("échec de la mise à jour de l'index : {0}")]
+    Index(String),
+
     /// An internal failure not tied to a specific git operation, e.g. a blocking
     /// task that panicked or was cancelled.
     #[error("erreur interne : {0}")]

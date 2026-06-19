@@ -70,3 +70,116 @@ pub struct RepoStatus {
     /// "Validé" — HEAD-tree vs. index.
     pub staged: Vec<StatusEntry>,
 }
+
+// The diff wire types below gain their first constructor in `git/diff.rs`; the
+// `allow(dead_code)` is removed in that commit.
+/// The role of a single line within a diff hunk, mirrored as a TypeScript union.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DiffLineKind {
+    /// Unchanged line, present on both sides.
+    Context,
+    /// Line added on the new side.
+    Add,
+    /// Line removed from the old side.
+    Delete,
+}
+
+/// One line of a diff hunk, carrying its 1-based line numbers on each side.
+///
+/// `old_no` is `None` for an added line and `new_no` is `None` for a deleted
+/// line; a context line has both. `content` is the line text without its
+/// trailing newline.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Line {
+    /// Whether the line is context, added or deleted.
+    pub kind: DiffLineKind,
+    /// 1-based line number on the old side, or `None` for an added line.
+    pub old_no: Option<u32>,
+    /// 1-based line number on the new side, or `None` for a deleted line.
+    pub new_no: Option<u32>,
+    /// The line text, newline excluded.
+    pub content: String,
+}
+
+/// A contiguous block of changed lines, matching a unified-diff `@@` header.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Hunk {
+    /// 1-based first line number on the old side.
+    pub old_start: u32,
+    /// Number of old-side lines the hunk spans.
+    pub old_lines: u32,
+    /// 1-based first line number on the new side.
+    pub new_start: u32,
+    /// Number of new-side lines the hunk spans.
+    pub new_lines: u32,
+    /// The hunk's lines, in display order.
+    pub lines: Vec<Line>,
+}
+
+/// The structured diff of a single changed file — the git-faithful hunks the
+/// frontend renders, and exactly the change staging this file would apply.
+///
+/// `hunks` is empty when there is nothing to render line-by-line: a binary file
+/// (`is_binary`), an unresolved conflict, or a pure mode change (`old_mode` ≠
+/// `new_mode` with identical content).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffFile {
+    /// Repository-relative path (the new path for a rename).
+    pub path: String,
+    /// How the file changed; reuses the status [`ChangeKind`].
+    pub change_kind: ChangeKind,
+    /// Octal file mode on the old side (e.g. `"100644"`), or `None` if absent.
+    pub old_mode: Option<String>,
+    /// Octal file mode on the new side, or `None` if absent.
+    pub new_mode: Option<String>,
+    /// Whether either side is binary, in which case no hunks are produced.
+    pub is_binary: bool,
+    /// The diff hunks, in path order; empty for binary/conflict/mode-only files.
+    pub hunks: Vec<Hunk>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ChangeKind, DiffFile, DiffLineKind, Hunk, Line};
+
+    /// The diff wire shape must serialise to the camelCase keys the frontend
+    /// types mirror, including the `null` line numbers on added/deleted lines.
+    #[test]
+    fn diff_file_serialises_to_camel_case() {
+        let file = DiffFile {
+            path: "src/a.rs".into(),
+            change_kind: ChangeKind::Modified,
+            old_mode: Some("100644".into()),
+            new_mode: Some("100644".into()),
+            is_binary: false,
+            hunks: vec![Hunk {
+                old_start: 1,
+                old_lines: 1,
+                new_start: 1,
+                new_lines: 2,
+                lines: vec![
+                    Line { kind: DiffLineKind::Context, old_no: Some(1), new_no: Some(1), content: "keep".into() },
+                    Line { kind: DiffLineKind::Add, old_no: None, new_no: Some(2), content: "new".into() },
+                ],
+            }],
+        };
+
+        let json = serde_json::to_value(&file).expect("serialise DiffFile");
+        assert_eq!(json["changeKind"], "modified");
+        assert_eq!(json["oldMode"], "100644");
+        assert_eq!(json["isBinary"], false);
+
+        let line = &json["hunks"][0]["lines"][1];
+        assert_eq!(line["kind"], "add");
+        assert_eq!(line["oldNo"], serde_json::Value::Null);
+        assert_eq!(line["newNo"], 2);
+    }
+}
