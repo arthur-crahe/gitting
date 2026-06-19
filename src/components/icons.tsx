@@ -98,6 +98,25 @@ export function Chevron({ open, className }: { open: boolean; className?: string
   )
 }
 
+/** Checkmark — validates (stages) a file. */
+export function CheckIcon() {
+  return (
+    <StrokeIcon size={14} strokeWidth={1.7}>
+      <path d="M3 8.5 6.5 12 13 4.5" />
+    </StrokeIcon>
+  )
+}
+
+/** Curved back-arrow — un-validates (unstages) a file, sending it to review. */
+export function UndoIcon() {
+  return (
+    <StrokeIcon size={14}>
+      <path d="M6 4 2.5 7.5 6 11" />
+      <path d="M2.5 7.5h7a4 4 0 0 1 0 8H7" />
+    </StrokeIcon>
+  )
+}
+
 /** Stacked horizontal lines — the flat-list view in the layout toggle. */
 export function ListIcon() {
   return (

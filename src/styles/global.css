@@ -531,3 +531,193 @@ body {
   align-items: center;
   gap: 6px;
 }
+
+/* ── Master-detail review surface ─────────────────────────────────────────── */
+
+/* In review mode the content area is a fixed-height frame; its panes scroll. */
+.app-content--review {
+  overflow: hidden;
+}
+
+.review-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  padding: 14px 18px;
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 12px;
+}
+
+.review__toolbar {
+  flex: 0 0 auto;
+}
+
+/* The split: a scrollable file-list pane and a diff pane sharing the height. */
+.review-split {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--gray-a4);
+  border-radius: var(--radius-3);
+  overflow: hidden;
+}
+
+.review-split__list {
+  flex: 0 0 320px;
+  min-width: 240px;
+  overflow: auto;
+  padding: 8px 12px;
+  border-right: 1px solid var(--gray-a4);
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-a6) transparent;
+}
+
+.review-split__diff {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The select target fills the row so the trailing action sits flush right. */
+.file-row__select,
+.tree-file__select {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+/* Trailing validate/unvalidate action: hidden until row hover or selection. */
+.row-act {
+  flex: 0 0 auto;
+  opacity: 0;
+}
+
+.file-row:hover .row-act,
+.tree-file:hover .row-act,
+.file-row[data-selected="true"] .row-act,
+.tree-file[data-selected="true"] .row-act {
+  opacity: 1;
+}
+
+.file-row[data-selected="true"],
+.tree-file[data-selected="true"] {
+  background: var(--accent-a3);
+}
+
+/* ── Diff panel ───────────────────────────────────────────────────────────── */
+
+.diff-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+}
+
+.diff-panel--empty {
+  padding: 24px;
+}
+
+.diff-panel__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--gray-a4);
+}
+
+.diff-panel__path {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--code-font-family, ui-monospace, monospace);
+  font-size: var(--font-size-2);
+  color: var(--gray-12);
+}
+
+.diff-panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-a6) transparent;
+}
+
+.diff-empty {
+  display: block;
+  padding: 16px;
+}
+
+/* ── Diff rendering ───────────────────────────────────────────────────────── */
+
+.diff {
+  width: max-content;
+  min-width: 100%;
+  font-family: var(--code-font-family, ui-monospace, monospace);
+  font-size: var(--font-size-1);
+  line-height: 1.6;
+}
+
+.diff-hunk-head {
+  padding: 2px 10px;
+  color: var(--accent-a11);
+  background: var(--accent-a2);
+  white-space: pre;
+  user-select: none;
+}
+
+.diff-line {
+  display: grid;
+  grid-template-columns: 4ch 4ch 2ch 1fr;
+}
+
+.diff-line__no {
+  padding-right: 8px;
+  text-align: right;
+  color: var(--gray-a8);
+  user-select: none;
+}
+
+.diff-line__sign {
+  text-align: center;
+  user-select: none;
+}
+
+.diff-line__content {
+  white-space: pre;
+  font: inherit;
+}
+
+.diff-line--add {
+  background: var(--green-a3);
+}
+
+.diff-line--add .diff-line__sign {
+  color: var(--green-11);
+}
+
+.diff-line--delete {
+  background: var(--red-a3);
+}
+
+.diff-line--delete .diff-line__sign {
+  color: var(--red-11);
+}

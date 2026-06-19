@@ -80,13 +80,20 @@ export function App() {
   return (
     <div className="app-shell">
       <Titlebar />
-      <main className="app-content">
-        <Container size="3" px="6" py="7">
-          <Flex direction="column" gap="6">
+      <main className={`app-content${ready ? ' app-content--review' : ''}`}>
+        {ready ? (
+          <div className="review-shell">
             <UpdateNotice />
-            {ready ? <ReviewView /> : <Welcome />}
-          </Flex>
-        </Container>
+            <ReviewView />
+          </div>
+        ) : (
+          <Container size="3" px="6" py="7">
+            <Flex direction="column" gap="6">
+              <UpdateNotice />
+              <Welcome />
+            </Flex>
+          </Container>
+        )}
       </main>
       <footer className="app-footer">
         <AppVersion />

@@ -1,9 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Chevron } from '../../components/icons'
 import type { StatusEntry } from '../../lib/git'
+import type { DiffSection } from '../../stores/use-diff-store'
 import { changeKindGlyph } from './change-kind'
 import { buildFileTree, type TreeNode } from './file-tree'
+import { isSelected, useRowActions } from './row-context'
 import { StatusGlyph } from './status-glyph'
+import { ValidateButton } from './validate-button'
 
 /** Base left inset (px), matching the flat list's row padding. */
 const ROW_INSET = 8
@@ -24,6 +27,8 @@ function nodeKey(node: TreeNode): string {
 interface RowProps {
   node: TreeNode
   depth: number
+  /** Which review section the tree belongs to. */
+  section: DiffSection
   /** Directory paths that are currently collapsed. */
   collapsed: ReadonlySet<string>
   /** Flip a directory's collapsed state. */
@@ -31,17 +36,28 @@ interface RowProps {
 }
 
 /** One tree row: a collapsible directory (with its children) or a file leaf. */
-function NodeRow({ node, depth, collapsed, onToggle }: RowProps) {
+function NodeRow({ node, depth, section, collapsed, onToggle }: RowProps) {
+  const { selected, select } = useRowActions()
+
   if (node.type === 'file') {
-    const glyph = changeKindGlyph(node.entry.kind)
+    const { entry } = node
+    const glyph = changeKindGlyph(entry.kind)
     return (
       <div
         className="tree-file"
         style={{ paddingLeft: inset(depth) }}
-        title={`${glyph.label} — ${node.entry.path}`}
+        data-selected={isSelected(selected, section, entry.path)}
       >
-        <StatusGlyph kind={node.entry.kind} />
-        <span className="tree-file__name">{node.name}</span>
+        <button
+          type="button"
+          className="tree-file__select"
+          onClick={() => select(section, entry.path)}
+          title={`${glyph.label} — ${entry.path}`}
+        >
+          <StatusGlyph kind={entry.kind} />
+          <span className="tree-file__name">{node.name}</span>
+        </button>
+        <ValidateButton section={section} path={entry.path} />
       </div>
     )
   }
@@ -66,6 +82,7 @@ function NodeRow({ node, depth, collapsed, onToggle }: RowProps) {
               key={nodeKey(child)}
               node={child}
               depth={depth + 1}
+              section={section}
               collapsed={collapsed}
               onToggle={onToggle}
             />
@@ -82,7 +99,13 @@ function NodeRow({ node, depth, collapsed, onToggle }: RowProps) {
  * component-local state, so the set resets whenever the component remounts — on a
  * section toggle, a switch back to the list, or a change in entries.
  */
-export function FileTree({ entries }: { entries: readonly StatusEntry[] }) {
+export function FileTree({
+  entries,
+  section,
+}: {
+  entries: readonly StatusEntry[]
+  section: DiffSection
+}) {
   const tree = useMemo(() => buildFileTree(entries), [entries])
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
 
@@ -105,6 +128,7 @@ export function FileTree({ entries }: { entries: readonly StatusEntry[] }) {
           key={nodeKey(node)}
           node={node}
           depth={0}
+          section={section}
           collapsed={collapsed}
           onToggle={toggle}
         />
