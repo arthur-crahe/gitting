@@ -1,17 +1,21 @@
-import { type CSSProperties, useMemo } from 'react'
+import { type CSSProperties, useEffect, useReducer } from 'react'
 import type { HighlighterCore } from 'shiki/core'
 import type { DiffLine } from '../../../lib/git'
-import { tokenizeLine } from './tokenize'
+import { cachedTokens, tokenizeLineCached } from './tokenize'
 
 /** Unified-diff sign printed in the gutter for each line kind. */
 const SIGN: Record<DiffLine['kind'], string> = { context: ' ', add: '+', delete: '-' }
 
 /**
  * One rendered diff line: the old and new line-number gutters, the +/-/space
- * sign, then the line text — syntax-highlighted via Shiki when a highlighter and
- * a known language are available, plain text otherwise (and while Shiki loads).
- * Tinted green/red for add/delete. Numbers and sign are non-selectable so copying
- * a range yields just the code.
+ * sign, then the line text — syntax-highlighted via Shiki, tinted green/red for
+ * add/delete. Numbers and sign are non-selectable so copying a range yields just
+ * the code.
+ *
+ * Tokenization is expensive (~1 ms/line) so it never blocks the click: a line
+ * already in the {@link cachedTokens} cache renders colored immediately, an
+ * uncached one renders as plain text and is tokenized **after paint** (then
+ * cached), so switching files paints instantly and the colors fill in.
  */
 export function DiffLineRow({
   line,
@@ -22,13 +26,26 @@ export function DiffLineRow({
   highlighter: HighlighterCore | null
   lang: string | null
 }) {
-  const tokens = useMemo(
-    () =>
-      highlighter && lang && line.content !== ''
-        ? tokenizeLine(highlighter, line.content, lang)
-        : null,
-    [highlighter, lang, line.content],
-  )
+  const [, recolor] = useReducer((n: number) => n + 1, 0)
+
+  // Read from the cache on each render — cheap, and always reflects the current
+  // line even when the virtualizer recycles this row for a different file.
+  const tokens =
+    highlighter !== null && lang !== null && line.content !== ''
+      ? (cachedTokens(lang, line.content) ?? null)
+      : null
+
+  useEffect(() => {
+    if (highlighter === null || lang === null || line.content === '') {
+      return
+    }
+    if (cachedTokens(lang, line.content)) {
+      return
+    }
+    // Compute after paint, then re-render to pick up the freshly cached tokens.
+    tokenizeLineCached(highlighter, line.content, lang)
+    recolor()
+  }, [highlighter, lang, line.content])
 
   return (
     <div className={`diff-line diff-line--${line.kind}`}>

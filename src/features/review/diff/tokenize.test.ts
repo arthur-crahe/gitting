@@ -1,7 +1,7 @@
 import type { HighlighterCore } from 'shiki/core'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { getHighlighter } from '../../../lib/highlighter'
-import { tokenizeLine } from './tokenize'
+import { cachedTokens, tokenizeLine, tokenizeLineCached } from './tokenize'
 
 let highlighter: HighlighterCore
 
@@ -24,5 +24,15 @@ describe('tokenizeLine', () => {
 
   it('returns no tokens for an empty line', () => {
     expect(tokenizeLine(highlighter, '', 'typescript')).toEqual([])
+  })
+
+  it('caches a line so it is tokenized only once', () => {
+    const content = 'const cached = true'
+    expect(cachedTokens('typescript', content)).toBeUndefined()
+
+    const first = tokenizeLineCached(highlighter, content, 'typescript')
+    // A second call and a peek both return the very same cached array.
+    expect(tokenizeLineCached(highlighter, content, 'typescript')).toBe(first)
+    expect(cachedTokens('typescript', content)).toBe(first)
   })
 })
