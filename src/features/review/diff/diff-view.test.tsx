@@ -24,28 +24,31 @@ const FILE: DiffFile = {
   ],
 }
 
+// The line-by-line fidelity invariant is covered by flatten-hunks.test.ts; here
+// we only assert the component's branching, since the virtualized rows do not
+// mount under jsdom (no layout engine).
 describe('DiffView', () => {
-  it('renders exactly the file’s hunk lines, in order (DOM fidelity)', () => {
+  it('renders the virtualized scroller for a file with hunks', () => {
     const { container } = render(<DiffView file={FILE} />)
-    const rendered = [...container.querySelectorAll('.diff-line__content')].map(
-      (el) => el.textContent,
-    )
-    expect(rendered).toEqual(FILE.hunks.flatMap((h) => h.lines).map((l) => l.content))
+    expect(container.querySelector('.diff-scroll')).not.toBeNull()
+    expect(container.querySelector('.diff-empty')).toBeNull()
   })
 
-  it('shows the hunk header', () => {
-    const { container } = render(<DiffView file={FILE} />)
-    expect(container.querySelector('.diff-hunk-head')?.textContent).toBe('@@ -1,2 +1,2 @@')
-  })
-
-  it('shows a notice instead of lines for a binary file', () => {
+  it('shows a notice instead of a scroller for a binary file', () => {
     const { container } = render(<DiffView file={{ ...FILE, isBinary: true, hunks: [] }} />)
-    expect(container.querySelectorAll('.diff-line').length).toBe(0)
+    expect(container.querySelector('.diff-scroll')).toBeNull()
     expect(container.textContent).toMatch(/binaire/i)
   })
 
   it('shows a notice for a hunkless conflict', () => {
     const { container } = render(<DiffView file={{ ...FILE, changeKind: 'conflict', hunks: [] }} />)
     expect(container.textContent).toMatch(/conflit/i)
+  })
+
+  it('shows a notice for a mode-only change', () => {
+    const { container } = render(
+      <DiffView file={{ ...FILE, oldMode: '100644', newMode: '100755', hunks: [] }} />,
+    )
+    expect(container.textContent).toMatch(/mode/i)
   })
 })

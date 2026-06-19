@@ -723,12 +723,12 @@ body {
   color: var(--gray-12);
 }
 
+/* The body delegates scrolling to the virtualized .diff-scroll inside it. */
 .diff-panel__body {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-a6) transparent;
+  display: flex;
+  flex-direction: column;
 }
 
 .diff-empty {
@@ -736,18 +736,40 @@ body {
   padding: 16px;
 }
 
-/* ── Diff rendering ───────────────────────────────────────────────────────── */
+/* ── Diff rendering (virtualized) ─────────────────────────────────────────── */
 
-.diff {
-  width: max-content;
-  min-width: 100%;
+/* The scroll viewport: vertical virtualization, horizontal scroll for long lines. */
+.diff-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   font-family: var(--code-font-family, ui-monospace, monospace);
   font-size: var(--font-size-1);
-  line-height: 1.6;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-a6) transparent;
+}
+
+/* Spacer sized to the full diff height; rows are absolutely positioned within. */
+.diff-sizer {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* One virtualized row, translated to its place; as wide as its content. */
+.diff-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  min-width: 100%;
+  height: var(--diff-row-height, 20px);
 }
 
 .diff-hunk-head {
-  padding: 2px 10px;
+  height: var(--diff-row-height, 20px);
+  line-height: var(--diff-row-height, 20px);
+  padding: 0 10px;
   color: var(--accent-a11);
   background: var(--accent-a2);
   white-space: pre;
@@ -757,6 +779,8 @@ body {
 .diff-line {
   display: grid;
   grid-template-columns: 4ch 4ch 2ch 1fr;
+  height: var(--diff-row-height, 20px);
+  line-height: var(--diff-row-height, 20px);
 }
 
 .diff-line__no {
