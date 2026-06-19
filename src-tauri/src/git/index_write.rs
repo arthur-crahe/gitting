@@ -87,15 +87,19 @@ impl GitCli {
     }
 }
 
-/// Rejects an absolute path or one escaping the worktree (`..`); the file always
-/// comes from our own status list, so this only guards against a malformed IPC
-/// argument. The path is the last element, after the `--` separator.
+/// Rejects anything that is not a single in-tree path: an empty argument, an
+/// absolute path, a `.` (which would target the whole worktree), or a `..`
+/// escape. The file always comes from our own status list, so this only guards
+/// against a malformed IPC argument. The path is the last element, after the
+/// `--` separator.
 fn reject_unsafe_path(args: &[&str]) -> Result<(), GitError> {
-    let file = Path::new(args.last().copied().unwrap_or_default());
-    let unsafe_path = file.is_absolute()
-        || file
-            .components()
-            .any(|c| matches!(c, std::path::Component::ParentDir));
+    let raw = args.last().copied().unwrap_or_default();
+    let file = Path::new(raw);
+    let unsafe_path = raw.is_empty()
+        || file.is_absolute()
+        || file.components().any(|c| {
+            matches!(c, std::path::Component::ParentDir | std::path::Component::CurDir)
+        });
     if unsafe_path {
         return Err(GitError::Index(format!(
             "chemin de fichier invalide : {}",
@@ -153,6 +157,21 @@ mod tests {
     fn an_escaping_path_is_rejected() {
         let repo = TempRepo::init();
         let err = stage_file(repo.path(), "../outside.txt").expect_err("should reject");
+        assert!(matches!(err, GitError::Index(_)));
+    }
+
+    #[test]
+    fn an_absolute_path_is_rejected() {
+        let repo = TempRepo::init();
+        let absolute = if cfg!(windows) { "C:\\etc\\passwd" } else { "/etc/passwd" };
+        let err = stage_file(repo.path(), absolute).expect_err("should reject");
+        assert!(matches!(err, GitError::Index(_)));
+    }
+
+    #[test]
+    fn a_dot_path_is_rejected_so_one_call_cannot_stage_everything() {
+        let repo = TempRepo::init();
+        let err = stage_file(repo.path(), ".").expect_err("should reject");
         assert!(matches!(err, GitError::Index(_)));
     }
 }
