@@ -3,13 +3,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../lib/git', () => ({
   openRepo: vi.fn(),
   readStatus: vi.fn(),
+  stageFile: vi.fn(),
+  unstageFile: vi.fn(),
+  diffUnstaged: vi.fn(),
+  diffStaged: vi.fn(),
 }))
 
-import { openRepo, type RepoInfo, type RepoStatus, readStatus } from '../lib/git'
+import {
+  openRepo,
+  type RepoInfo,
+  type RepoStatus,
+  readStatus,
+  stageFile,
+  unstageFile,
+} from '../lib/git'
 import { useRepoStore } from './use-repo-store'
 
 const mockedOpen = vi.mocked(openRepo)
 const mockedStatus = vi.mocked(readStatus)
+const mockedStage = vi.mocked(stageFile)
+const mockedUnstage = vi.mocked(unstageFile)
 
 const INFO: RepoInfo = { root: '/repo', name: 'repo', branch: 'main' }
 const STATUS: RepoStatus = {
@@ -85,6 +98,47 @@ describe('useRepoStore', () => {
     expect(s.status).toEqual(STATUS)
     expect(s.info).toEqual(INFO)
     expect(s.error).toBe('lecture impossible')
+  })
+
+  it('stage validates a file then re-reads the status', async () => {
+    useRepoStore.setState({ phase: 'ready', info: INFO, status: STATUS })
+    mockedStage.mockResolvedValue()
+    const next: RepoStatus = { unstaged: [], staged: [{ path: 'src/a.ts', kind: 'modified' }] }
+    mockedStatus.mockResolvedValue(next)
+
+    await useRepoStore.getState().stage('src/a.ts')
+
+    expect(mockedStage).toHaveBeenCalledWith('/repo', 'src/a.ts')
+    expect(mockedStatus).toHaveBeenCalledWith('/repo')
+    expect(useRepoStore.getState().status).toEqual(next)
+  })
+
+  it('unstage sends a file back then re-reads the status', async () => {
+    useRepoStore.setState({ phase: 'ready', info: INFO, status: STATUS })
+    mockedUnstage.mockResolvedValue()
+    mockedStatus.mockResolvedValue(STATUS)
+
+    await useRepoStore.getState().unstage('src/b.ts')
+
+    expect(mockedUnstage).toHaveBeenCalledWith('/repo', 'src/b.ts')
+    expect(mockedStatus).toHaveBeenCalledWith('/repo')
+  })
+
+  it('surfaces an index-write failure without closing the repo', async () => {
+    useRepoStore.setState({ phase: 'ready', info: INFO, status: STATUS })
+    mockedStage.mockRejectedValue(new Error('git introuvable'))
+
+    await useRepoStore.getState().stage('src/a.ts')
+
+    const s = useRepoStore.getState()
+    expect(s.phase).toBe('ready')
+    expect(s.info).toEqual(INFO)
+    expect(s.error).toBe('git introuvable')
+  })
+
+  it('stage is a no-op when no repository is open', async () => {
+    await useRepoStore.getState().stage('x')
+    expect(mockedStage).not.toHaveBeenCalled()
   })
 
   it('discards a superseded open result so the latest request wins', async () => {

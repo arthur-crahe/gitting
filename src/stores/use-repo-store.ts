@@ -1,5 +1,13 @@
 import { create } from 'zustand'
-import { openRepo, type RepoInfo, type RepoStatus, readStatus } from '../lib/git'
+import {
+  openRepo,
+  type RepoInfo,
+  type RepoStatus,
+  readStatus,
+  stageFile,
+  unstageFile,
+} from '../lib/git'
+import { useDiffStore } from './use-diff-store'
 
 /** Lifecycle of the opened repository, surfaced to the UI. */
 export type RepoPhase = 'empty' | 'loading' | 'ready' | 'error'
@@ -18,6 +26,10 @@ export interface RepoStoreState {
   open: (path: string) => Promise<void>
   /** Re-read the status of the currently open repository. No-op if none. */
   refresh: () => Promise<void>
+  /** Validate `file`: stage it, refresh, and re-align the diff selection. */
+  stage: (file: string) => Promise<void>
+  /** Un-validate `file`: unstage it, refresh, and re-align the diff selection. */
+  unstage: (file: string) => Promise<void>
 }
 
 /**
@@ -69,7 +81,37 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
       set({ error: toMessage(error) })
     }
   },
+
+  stage: (file) => mutateIndex(get, set, stageFile, file),
+  unstage: (file) => mutateIndex(get, set, unstageFile, file),
 }))
+
+/**
+ * Runs an index write (`stage`/`unstage`) for `file`, then refreshes the status
+ * and re-aligns the diff selection so the panel follows the file across
+ * sections. A failure surfaces inline without disturbing the open repo.
+ */
+async function mutateIndex(
+  get: () => RepoStoreState,
+  set: (partial: Partial<RepoStoreState>) => void,
+  write: (root: string, file: string) => Promise<void>,
+  file: string,
+): Promise<void> {
+  const { info } = get()
+  if (!info) {
+    return
+  }
+  try {
+    await write(info.root, file)
+    await get().refresh()
+    const { status } = get()
+    if (status) {
+      useDiffStore.getState().reconcile(info.root, status)
+    }
+  } catch (error) {
+    set({ error: toMessage(error) })
+  }
+}
 
 /** Normalize an unknown thrown value to a message string. */
 function toMessage(error: unknown): string {
