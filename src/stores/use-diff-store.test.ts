@@ -37,8 +37,7 @@ async function flush() {
 describe('useDiffStore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useDiffStore.getState().invalidate()
-    useDiffStore.setState({ selected: null, diff: null, phase: 'idle', error: null })
+    useDiffStore.getState().reset()
   })
 
   it('selects an unstaged file and loads its diff by path', async () => {
@@ -83,16 +82,6 @@ describe('useDiffStore', () => {
     expect(useDiffStore.getState().diff).toEqual(fileB)
     // A cache hit resolves straight to ready, with no loading flash.
     expect(useDiffStore.getState().phase).toBe('ready')
-  })
-
-  it('invalidate forces the next selection to refetch', async () => {
-    mockedUnstaged.mockResolvedValue([FILE_A])
-    await useDiffStore.getState().select('/repo', { section: 'unstaged', path: 'src/a.ts' })
-    expect(mockedUnstaged).toHaveBeenCalledTimes(1)
-
-    useDiffStore.getState().invalidate()
-    await useDiffStore.getState().select('/repo', { section: 'unstaged', path: 'src/a.ts' })
-    expect(mockedUnstaged).toHaveBeenCalledTimes(2)
   })
 
   it('moves to error when the load fails', async () => {
@@ -158,5 +147,40 @@ describe('useDiffStore', () => {
     const s = useDiffStore.getState()
     expect(s.selected).toBeNull()
     expect(s.diff).toBeNull()
+  })
+
+  it('reconcile refetches fresh content when the file stays in its section', async () => {
+    const edited: DiffFile = { ...FILE_A, hunks: [] }
+    mockedUnstaged.mockResolvedValue([edited])
+    useDiffStore.setState({
+      selected: { section: 'unstaged', path: 'src/a.ts' },
+      diff: FILE_A,
+      phase: 'ready',
+      error: null,
+    })
+    const status: RepoStatus = { unstaged: [{ path: 'src/a.ts', kind: 'modified' }], staged: [] }
+
+    useDiffStore.getState().reconcile('/repo', status)
+    await flush()
+
+    // Same section, but the cache was dropped, so the edited diff is re-read.
+    expect(mockedUnstaged).toHaveBeenCalledWith('/repo')
+    expect(useDiffStore.getState().selected).toEqual({ section: 'unstaged', path: 'src/a.ts' })
+    expect(useDiffStore.getState().diff).toEqual(edited)
+  })
+
+  it('reset clears the selection and drops the section cache', async () => {
+    mockedUnstaged.mockResolvedValue([FILE_A])
+    await useDiffStore.getState().select('/repo', { section: 'unstaged', path: 'src/a.ts' })
+
+    useDiffStore.getState().reset()
+    const s = useDiffStore.getState()
+    expect(s.selected).toBeNull()
+    expect(s.diff).toBeNull()
+    expect(s.phase).toBe('idle')
+
+    // The dropped cache forces the next selection to refetch (no stale hit).
+    await useDiffStore.getState().select('/repo', { section: 'unstaged', path: 'src/a.ts' })
+    expect(mockedUnstaged).toHaveBeenCalledTimes(2)
   })
 })

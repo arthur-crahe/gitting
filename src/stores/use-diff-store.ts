@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toMessage } from '../lib/error'
 import { type DiffFile, diffStaged, diffUnstaged, type RepoStatus } from '../lib/git'
 
 /** Which review section a selected file belongs to. */
@@ -27,28 +28,38 @@ export interface DiffStoreState {
   select: (repoRoot: string, selection: DiffSelection) => Promise<void>
   /** Re-align the selection with a fresh `status` after a stage/unstage/refresh. */
   reconcile: (repoRoot: string, status: RepoStatus) => void
-  /** Drop the cached section diffs (call when the working tree changes). */
-  invalidate: () => void
   /** Close the panel. */
   clear: () => void
+  /** Reset to the empty state and drop the cache — when the open repo changes. */
+  reset: () => void
 }
 
 /**
  * Monotonic request token, mirroring {@link useRepoStore}: {@link
  * DiffStoreState.select} bumps it and commits only while still the latest in
- * flight, so a slow diff load can't clobber a newer selection.
+ * flight, so a slow diff load can't clobber a newer selection. {@link
+ * DiffStoreState.reset} bumps it too, so an in-flight load from a previous repo
+ * can't commit after the repo changed.
  */
 let requestToken = 0
 
 /**
  * Per-section cache of the last fetched diffs. A diff command computes the whole
  * section at once, so once fetched, switching between files in that section is a
- * synchronous lookup — no repeated backend round-trip. Invalidated whenever the
- * status changes ({@link DiffStoreState.invalidate}).
+ * synchronous lookup — no repeated backend round-trip. It is keyed only by
+ * section, so it is dropped whenever the working tree ({@link
+ * DiffStoreState.reconcile}) or the open repository ({@link DiffStoreState.reset})
+ * changes, never serving one repo's diff for another's same-named file.
  */
 const sectionCache: Record<DiffSection, readonly DiffFile[] | null> = {
   staged: null,
   unstaged: null,
+}
+
+/** Drops both cached section diffs. */
+function clearSectionCache(): void {
+  sectionCache.staged = null
+  sectionCache.unstaged = null
 }
 
 /**
@@ -76,7 +87,11 @@ export const useDiffStore = create<DiffStoreState>((set, get) => ({
       return
     }
 
-    set({ phase: 'loading' })
+    // Cache miss: keep the current diff only while reloading the *same* file (its
+    // content may have changed); clear it when switching files, so the panel
+    // never shows the previous file's diff under the new selection's path.
+    const previous = get().diff
+    set({ phase: 'loading', diff: previous?.path === selection.path ? previous : null })
     try {
       const files =
         selection.section === 'staged' ? await diffStaged(repoRoot) : await diffUnstaged(repoRoot)
@@ -96,6 +111,10 @@ export const useDiffStore = create<DiffStoreState>((set, get) => ({
   },
 
   reconcile: (repoRoot, status) => {
+    // The working tree changed: drop the cached section diffs so the re-aligned
+    // selection re-reads fresh content instead of a stale cache hit.
+    clearSectionCache()
+
     const { selected } = get()
     if (!selected) {
       return
@@ -119,15 +138,12 @@ export const useDiffStore = create<DiffStoreState>((set, get) => ({
     }
   },
 
-  invalidate: () => {
-    sectionCache.staged = null
-    sectionCache.unstaged = null
-  },
-
   clear: () => set({ selected: null, diff: null, phase: 'idle', error: null }),
-}))
 
-/** Normalize an unknown thrown value to a message string. */
-function toMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
+  reset: () => {
+    clearSectionCache()
+    // Supersede any in-flight load so it can't commit against the new repo.
+    requestToken += 1
+    set({ selected: null, diff: null, phase: 'idle', error: null })
+  },
+}))

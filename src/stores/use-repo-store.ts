@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toMessage } from '../lib/error'
 import {
   openRepo,
   type RepoInfo,
@@ -22,6 +23,8 @@ export interface RepoStoreState {
   status: RepoStatus | null
   /** Human-readable message from the last failed open or refresh, else `null`. */
   error: string | null
+  /** Paths with a stage/unstage write in flight, so rows can show progress. */
+  pendingPaths: ReadonlySet<string>
   /** Open `path` as the repository and load its status. */
   open: (path: string) => Promise<void>
   /** Re-read the status of the currently open repository. No-op if none. */
@@ -33,11 +36,13 @@ export interface RepoStoreState {
 }
 
 /**
- * Monotonic request token. {@link RepoStoreState.open} and
- * {@link RepoStoreState.refresh} bump it and commit only while still the latest
- * in flight, so a slow response can't clobber a newer one.
+ * Monotonic request tokens, one per action: each of {@link RepoStoreState.open}
+ * and {@link RepoStoreState.refresh} commits only while still the latest of its
+ * own kind in flight, so a slow response can't clobber a newer one — and a
+ * refresh never cancels an in-flight open (they no longer share a counter).
  */
-let requestToken = 0
+let openToken = 0
+let refreshToken = 0
 
 /**
  * Store for the repository under review. Holds the opened repo's identity and
@@ -51,16 +56,20 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
   info: null,
   status: null,
   error: null,
+  pendingPaths: new Set(),
 
   open: async (path) => {
-    const token = ++requestToken
+    const token = ++openToken
     set({ phase: 'loading', error: null })
     try {
       const [info, status] = await Promise.all([openRepo(path), readStatus(path)])
-      if (token !== requestToken) return
-      set({ phase: 'ready', info, status })
+      if (token !== openToken) return
+      // A different repository is now under review: drop the previous one's
+      // selection and diff cache so nothing leaks across the switch.
+      useDiffStore.getState().reset()
+      set({ phase: 'ready', info, status, pendingPaths: new Set() })
     } catch (error) {
-      if (token !== requestToken) return
+      if (token !== openToken) return
       set({ phase: 'error', info: null, status: null, error: toMessage(error) })
     }
   },
@@ -70,18 +79,18 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
     if (!info) {
       return
     }
-    const token = ++requestToken
+    const root = info.root
+    const token = ++refreshToken
     try {
-      const status = await readStatus(info.root)
-      if (token !== requestToken) return
+      const status = await readStatus(root)
+      // Discard if superseded, or if the repo changed under us (a switch).
+      if (token !== refreshToken || get().info?.root !== root) return
       set({ status, phase: 'ready', error: null })
-      // The working tree changed: drop the cached section diffs and re-align the
-      // open diff (its content may have changed, or it may have moved sections).
-      const diff = useDiffStore.getState()
-      diff.invalidate()
-      diff.reconcile(info.root, status)
+      // The working tree changed: re-align the open diff (its content may have
+      // changed, or it may have moved sections); reconcile drops the diff cache.
+      useDiffStore.getState().reconcile(root, status)
     } catch (error) {
-      if (token !== requestToken) return
+      if (token !== refreshToken || get().info?.root !== root) return
       // Keep the repo open on a failed re-read; surface the error inline.
       set({ error: toMessage(error) })
     }
@@ -93,9 +102,9 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
 
 /**
  * Runs an index write (`stage`/`unstage`) for `file`, then refreshes — which
- * invalidates the diff cache and re-aligns the selection so the panel follows
- * the file across sections. A failure surfaces inline without disturbing the
- * open repo.
+ * re-aligns the selection so the panel follows the file across sections. The
+ * file is marked pending for the duration so its row can disable/spin and a
+ * second click is ignored; a failure surfaces inline without disturbing the repo.
  */
 async function mutateIndex(
   get: () => RepoStoreState,
@@ -103,19 +112,19 @@ async function mutateIndex(
   write: (root: string, file: string) => Promise<void>,
   file: string,
 ): Promise<void> {
-  const { info } = get()
-  if (!info) {
+  const { info, pendingPaths } = get()
+  if (!info || pendingPaths.has(file)) {
     return
   }
+  set({ pendingPaths: new Set(pendingPaths).add(file) })
   try {
     await write(info.root, file)
     await get().refresh()
   } catch (error) {
     set({ error: toMessage(error) })
+  } finally {
+    const next = new Set(get().pendingPaths)
+    next.delete(file)
+    set({ pendingPaths: next })
   }
-}
-
-/** Normalize an unknown thrown value to a message string. */
-function toMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

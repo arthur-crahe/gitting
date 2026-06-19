@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toMessage } from '../lib/error'
 import { isTauriRuntime } from '../lib/runtime'
 import { type AvailableUpdate, checkForUpdate, installUpdate } from '../lib/updater'
 
@@ -81,8 +82,3 @@ export const useUpdateStore = create<UpdateStoreState>((set, get) => ({
 
   dismiss: () => set({ phase: 'idle', available: null, error: null }),
 }))
-
-/** Normalize an unknown thrown value to a message string. */
-function toMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}

@@ -17,6 +17,7 @@ import {
   stageFile,
   unstageFile,
 } from '../lib/git'
+import { useDiffStore } from './use-diff-store'
 import { useRepoStore } from './use-repo-store'
 
 const mockedOpen = vi.mocked(openRepo)
@@ -33,7 +34,14 @@ const STATUS: RepoStatus = {
 describe('useRepoStore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useRepoStore.setState({ phase: 'empty', info: null, status: null, error: null })
+    useRepoStore.setState({
+      phase: 'empty',
+      info: null,
+      status: null,
+      error: null,
+      pendingPaths: new Set(),
+    })
+    useDiffStore.getState().reset()
   })
 
   it('starts empty', () => {
@@ -139,6 +147,52 @@ describe('useRepoStore', () => {
   it('stage is a no-op when no repository is open', async () => {
     await useRepoStore.getState().stage('x')
     expect(mockedStage).not.toHaveBeenCalled()
+  })
+
+  it('resets the diff store when a different repository is opened', async () => {
+    mockedOpen.mockResolvedValue(INFO)
+    mockedStatus.mockResolvedValue(STATUS)
+    // A file from a previous repo is still open in the diff panel.
+    useDiffStore.setState({
+      selected: { section: 'unstaged', path: 'src/a.ts' },
+      diff: null,
+      phase: 'ready',
+      error: null,
+    })
+
+    await useRepoStore.getState().open('/repo')
+
+    // The switch must not leak the previous repo's selection into the new one.
+    expect(useDiffStore.getState().selected).toBeNull()
+    expect(useDiffStore.getState().phase).toBe('idle')
+  })
+
+  it('marks a file pending while its index write is in flight, then clears it', async () => {
+    useRepoStore.setState({ phase: 'ready', info: INFO, status: STATUS })
+    let resolveStage: () => void = () => {}
+    mockedStage.mockImplementation(() => new Promise<void>((res) => (resolveStage = res)))
+    mockedStatus.mockResolvedValue(STATUS)
+
+    const pending = useRepoStore.getState().stage('src/a.ts')
+    expect(useRepoStore.getState().pendingPaths.has('src/a.ts')).toBe(true)
+
+    resolveStage()
+    await pending
+    expect(useRepoStore.getState().pendingPaths.has('src/a.ts')).toBe(false)
+  })
+
+  it('ignores a second write for a file already in flight', async () => {
+    useRepoStore.setState({ phase: 'ready', info: INFO, status: STATUS })
+    let resolveStage: () => void = () => {}
+    mockedStage.mockImplementation(() => new Promise<void>((res) => (resolveStage = res)))
+    mockedStatus.mockResolvedValue(STATUS)
+
+    const first = useRepoStore.getState().stage('src/a.ts')
+    void useRepoStore.getState().stage('src/a.ts')
+    resolveStage()
+    await first
+
+    expect(mockedStage).toHaveBeenCalledTimes(1)
   })
 
   it('discards a superseded open result so the latest request wins', async () => {
