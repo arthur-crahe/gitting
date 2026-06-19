@@ -10,6 +10,9 @@ mod error;
 mod repo;
 mod status;
 
+#[cfg(test)]
+mod test_support;
+
 pub use error::GitError;
 pub use repo::open_repo;
 pub use status::read_status;

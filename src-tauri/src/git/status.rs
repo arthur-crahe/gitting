@@ -117,3 +117,34 @@ fn worktree_kind(
 fn path_string(path: &[u8]) -> String {
     path.to_str_lossy().into_owned()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::read_status;
+    use crate::git::test_support::TempRepo;
+    use crate::git::ChangeKind;
+
+    #[test]
+    fn modification_moves_from_unstaged_to_staged() {
+        let repo = TempRepo::init();
+        repo.write("a.txt", "one\ntwo\n");
+        repo.stage("a.txt");
+        repo.commit("add a.txt");
+
+        // A worktree edit is pending review: it shows up unstaged, not staged.
+        repo.write("a.txt", "one\ntwo\nthree\n");
+        let status = read_status(repo.path()).expect("read status");
+        assert_eq!(status.unstaged.len(), 1);
+        assert_eq!(status.unstaged[0].path, "a.txt");
+        assert!(matches!(status.unstaged[0].kind, ChangeKind::Modified));
+        assert!(status.staged.is_empty());
+
+        // Validating it (staging) moves it into the accepted section.
+        repo.stage("a.txt");
+        let status = read_status(repo.path()).expect("read status");
+        assert!(status.unstaged.is_empty());
+        assert_eq!(status.staged.len(), 1);
+        assert_eq!(status.staged[0].path, "a.txt");
+        assert!(matches!(status.staged[0].kind, ChangeKind::Modified));
+    }
+}
