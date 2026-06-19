@@ -1,57 +1,23 @@
 import { Callout, Flex, Heading, IconButton, Text, Tooltip } from '@radix-ui/themes'
 import { useState } from 'react'
-import { RefreshIcon } from '../../components/icons'
+import { Chevron, RefreshIcon } from '../../components/icons'
 import type { StatusEntry } from '../../lib/git'
+import { splitPath } from '../../lib/path'
 import { useRepoStore } from '../../stores/use-repo-store'
+import { useViewStore, type ViewMode } from '../../stores/use-view-store'
 import { RepoPicker } from '../repo/repo-picker'
 import { changeKindGlyph } from './change-kind'
+import { StatusGlyph } from './status-glyph'
+import { FileTree } from './tree-view'
+import { ViewModeToggle } from './view-mode-toggle'
 
-/** Disclosure chevron — points down when open, right when collapsed. */
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg
-      className="review-section__chevron"
-      data-open={open}
-      viewBox="0 0 16 16"
-      width="14"
-      height="14"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M4 6l4 4 4-4"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-/** Splits a repo-relative path into its directory prefix and file name. */
-function splitPath(path: string): { dir: string; name: string } {
-  const slash = path.lastIndexOf('/')
-  return slash === -1
-    ? { dir: '', name: path }
-    : { dir: path.slice(0, slash + 1), name: path.slice(slash + 1) }
-}
-
-/** A single changed file: its status letter and repository-relative path. */
+/** A single changed file in the flat list: its status glyph and full path. */
 function FileRow({ entry }: { entry: StatusEntry }) {
   const glyph = changeKindGlyph(entry.kind)
   const { dir, name } = splitPath(entry.path)
   return (
     <div className="file-row" title={`${glyph.label} — ${entry.path}`}>
-      <Text
-        className="status-glyph"
-        color={glyph.color}
-        weight="bold"
-        size="2"
-        aria-label={glyph.label}
-      >
-        {glyph.letter}
-      </Text>
+      <StatusGlyph kind={entry.kind} />
       <span className="file-row__path">
         {dir ? <span className="file-row__dir">{dir}</span> : null}
         <span className="file-row__name">{name}</span>
@@ -65,10 +31,12 @@ function StatusSection({
   title,
   entries,
   empty,
+  mode,
 }: {
   title: string
   entries: readonly StatusEntry[]
   empty: string
+  mode: ViewMode
 }) {
   const [open, setOpen] = useState(true)
   return (
@@ -80,7 +48,7 @@ function StatusSection({
         onClick={() => setOpen((prev) => !prev)}
       >
         <span className="review-section__title">
-          <Chevron open={open} />
+          <Chevron open={open} className="disclosure-chevron" />
           <Heading size="3" weight="medium">
             {title}
           </Heading>
@@ -95,6 +63,8 @@ function StatusSection({
           <Text size="2" color="gray" className="review-section__empty">
             {empty}
           </Text>
+        ) : mode === 'tree' ? (
+          <FileTree entries={entries} />
         ) : (
           <div className="review-section__list">
             {entries.map((entry) => (
@@ -110,12 +80,13 @@ function StatusSection({
 /**
  * The review surface for an opened repository: the two collapsible sections —
  * "Validé" (staged) on top, "À reviewer" (unstaged) below — with a toolbar to
- * refresh or switch repo.
+ * switch the file layout (list/tree), refresh, or change repo.
  */
 export function ReviewView() {
   const status = useRepoStore((s) => s.status)
   const refresh = useRepoStore((s) => s.refresh)
   const error = useRepoStore((s) => s.error)
+  const mode = useViewStore((s) => s.mode)
 
   if (!status) {
     return null
@@ -128,6 +99,7 @@ export function ReviewView() {
           Valider un fichier le déplace de « À reviewer » vers « Validé ».
         </Text>
         <Flex align="center" gap="2">
+          <ViewModeToggle />
           <Tooltip content="Rafraîchir">
             <IconButton
               variant="ghost"
@@ -153,8 +125,14 @@ export function ReviewView() {
         title="Validé"
         entries={status.staged}
         empty="Rien de validé pour l'instant."
+        mode={mode}
       />
-      <StatusSection title="À reviewer" entries={status.unstaged} empty="Tout a été relu." />
+      <StatusSection
+        title="À reviewer"
+        entries={status.unstaged}
+        empty="Tout a été relu."
+        mode={mode}
+      />
     </Flex>
   )
 }

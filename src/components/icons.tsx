@@ -69,3 +69,52 @@ export function MoonIcon() {
     </StrokeIcon>
   )
 }
+
+/**
+ * Disclosure chevron — points down when `open`, rotates to point right when
+ * collapsed. Rotation is CSS-driven through the `[data-open]` attribute; the
+ * caller supplies the `className` carrying those rules (the app uses
+ * `disclosure-chevron`).
+ */
+export function Chevron({ open, className }: { open: boolean; className?: string }) {
+  return (
+    <svg
+      className={className}
+      data-open={open}
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 6l4 4 4-4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** Stacked horizontal lines — the flat-list view in the layout toggle. */
+export function ListIcon() {
+  return (
+    <StrokeIcon size={14}>
+      <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />
+    </StrokeIcon>
+  )
+}
+
+/** A root row with two branching children — the tree view in the layout toggle. */
+export function TreeIcon() {
+  return (
+    <StrokeIcon size={14}>
+      <path d="M2.5 3.5h11" />
+      <path d="M5 3.5v9" />
+      <path d="M5 8h8.5" />
+      <path d="M5 12h8.5" />
+    </StrokeIcon>
+  )
+}

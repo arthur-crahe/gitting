@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { readStorage, writeStorage } from '../lib/storage'
 
 /** Light or dark theme. */
 export type Appearance = 'light' | 'dark'
@@ -49,24 +50,6 @@ function initialAppearance(): Appearance {
 function initialAccent(): AccentColor {
   const stored = readStorage(ACCENT_KEY)
   return ACCENT_COLORS.includes(stored as AccentColor) ? (stored as AccentColor) : 'iris'
-}
-
-/** Reads a key from `localStorage`, tolerating its absence (e.g. in tests). */
-function readStorage(key: string): string | null {
-  try {
-    return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null
-  } catch {
-    return null
-  }
-}
-
-/** Writes a key to `localStorage`, ignoring failures (private mode, tests). */
-function writeStorage(key: string, value: string): void {
-  try {
-    localStorage?.setItem(key, value)
-  } catch {
-    // Persistence is best-effort; the in-memory store stays authoritative.
-  }
 }
 
 /** State and actions for the user's theme preferences. */

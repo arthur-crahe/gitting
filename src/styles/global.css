@@ -384,7 +384,8 @@ body {
   min-width: 0;
 }
 
-.review-section__chevron {
+/* Disclosure chevron shared by the section heads and the tree folders. */
+.disclosure-chevron {
   flex: 0 0 auto;
   color: var(--gray-a10);
   transition:
@@ -392,11 +393,11 @@ body {
     color 130ms ease;
 }
 
-.review-section__chevron[data-open="false"] {
+.disclosure-chevron[data-open="false"] {
   transform: rotate(-90deg);
 }
 
-.review-section__head:hover .review-section__chevron {
+.review-section__head:hover .disclosure-chevron {
   color: var(--gray-12);
 }
 
@@ -466,4 +467,67 @@ body {
   flex: 0 0 auto;
   white-space: nowrap;
   color: var(--gray-12);
+}
+
+/* ── File tree ────────────────────────────────────────────────────────────── */
+
+/* Negative inline margin so row hover backgrounds extend past the text column,
+ * matching .review-section__list. */
+.tree {
+  margin-inline: -8px;
+}
+
+/* Folders and files share a row shape; the left padding is set inline per depth
+ * (8px base + 16px per level), so it is intentionally absent here. */
+.tree-folder,
+.tree-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding-block: 5px;
+  padding-right: 8px;
+  border-radius: var(--radius-2);
+}
+
+.tree-folder {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tree-folder:hover,
+.tree-file:hover {
+  background: var(--gray-a3);
+}
+
+.tree-folder:hover .disclosure-chevron {
+  color: var(--gray-12);
+}
+
+.tree-file {
+  cursor: default;
+}
+
+/* Names truncate and use the monospace path treatment, matching the flat list
+ * (where the whole path, directory prefix included, is monospaced). */
+.tree-folder__name,
+.tree-file__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--code-font-family, ui-monospace, monospace);
+  font-size: var(--font-size-2);
+  color: var(--gray-12);
+}
+
+/* Layout toggle: icon + label inside each segment. */
+.view-toggle__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
