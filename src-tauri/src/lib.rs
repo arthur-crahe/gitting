@@ -20,6 +20,8 @@ pub fn run() {
             commands::repo_status,
             commands::diff_unstaged,
             commands::diff_staged,
+            commands::stage_file,
+            commands::unstage_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

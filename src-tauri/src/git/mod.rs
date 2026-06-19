@@ -8,6 +8,7 @@
 
 mod diff;
 mod error;
+mod index_write;
 mod repo;
 mod status;
 
@@ -16,6 +17,7 @@ mod test_support;
 
 pub use diff::{diff_staged, diff_unstaged};
 pub use error::GitError;
+pub use index_write::{stage_file, unstage_file};
 pub use repo::open_repo;
 pub use status::read_status;
 

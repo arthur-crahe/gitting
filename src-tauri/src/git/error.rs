@@ -27,10 +27,7 @@ pub enum GitError {
     #[error("échec du calcul du diff : {0}")]
     Diff(String),
 
-    // `Index` gains its first construction site in `git/index_write.rs`; the
-    // `allow(dead_code)` is removed in that commit.
     /// Writing the index (staging / unstaging a file) failed.
-    #[allow(dead_code)]
     #[error("échec de la mise à jour de l'index : {0}")]
     Index(String),
 

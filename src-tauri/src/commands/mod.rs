@@ -33,6 +33,18 @@ pub async fn diff_staged(path: String) -> Result<Vec<DiffFile>, GitError> {
     run(move || git::diff_staged(&PathBuf::from(path))).await
 }
 
+/// Validates a file: stages it, moving it from "À reviewer" to "Validé".
+#[tauri::command]
+pub async fn stage_file(path: String, file: String) -> Result<(), GitError> {
+    run(move || git::stage_file(&PathBuf::from(path), &file)).await
+}
+
+/// Un-validates a file: unstages it, sending it back to "À reviewer".
+#[tauri::command]
+pub async fn unstage_file(path: String, file: String) -> Result<(), GitError> {
+    run(move || git::unstage_file(&PathBuf::from(path), &file)).await
+}
+
 /// Runs a blocking git operation on the blocking pool, flattening a join panic
 /// into a [`GitError`].
 async fn run<T, F>(op: F) -> Result<T, GitError>
