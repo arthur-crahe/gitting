@@ -43,6 +43,9 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  /* Discreet, app-like scrollbars in the scrolling content region. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-a6) transparent;
 }
 
 /* Slim footer carrying the running version; fused to the surface like the bar. */
@@ -54,12 +57,6 @@ body {
   height: 28px;
   padding-inline: 16px;
   border-top: 1px solid var(--gray-a4);
-}
-
-/* Discreet, app-like scrollbars in the scrolling content region. */
-.app-content {
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-a6) transparent;
 }
 
 .app-content::-webkit-scrollbar {
@@ -681,7 +678,8 @@ body {
 .file-row:hover .row-act,
 .tree-file:hover .row-act,
 .file-row[data-selected="true"] .row-act,
-.tree-file[data-selected="true"] .row-act {
+.tree-file[data-selected="true"] .row-act,
+.row-act[data-pending] {
   opacity: 1;
 }
 
@@ -749,10 +747,11 @@ body {
   scrollbar-color: var(--gray-a6) transparent;
 }
 
-/* Spacer sized to the full diff height; rows are absolutely positioned within. */
+/* Spacer sized to the full diff height; rows are absolutely positioned within.
+ * Its width is set inline per file (the widest line), so the horizontal scroll
+ * extent is stable regardless of which rows the virtualizer has mounted. */
 .diff-sizer {
   position: relative;
-  width: max-content;
   min-width: 100%;
 }
 
@@ -778,7 +777,9 @@ body {
 
 .diff-line {
   display: grid;
-  grid-template-columns: 4ch 4ch 2ch 1fr;
+  /* The two number gutters size to the file's widest line number (set inline as
+   * --diff-no-width), so a 4+ digit number never overflows its track. */
+  grid-template-columns: var(--diff-no-width, 4ch) var(--diff-no-width, 4ch) 2ch 1fr;
   height: var(--diff-row-height, 20px);
   line-height: var(--diff-row-height, 20px);
 }

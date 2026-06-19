@@ -35,4 +35,31 @@ describe('tokenizeLine', () => {
     expect(tokenizeLineCached(highlighter, content, 'typescript')).toBe(first)
     expect(cachedTokens('typescript', content)).toBe(first)
   })
+
+  it('evicts the least-recently-used entry one at a time past the cap', () => {
+    // A no-cost stub so we can fill far past the cap without real tokenization.
+    const stub = {
+      codeToTokensWithThemes: (content: string) => [
+        [
+          {
+            offset: 0,
+            content,
+            variants: {
+              light: { color: '#000000', fontStyle: 0 },
+              dark: { color: '#ffffff', fontStyle: 0 },
+            },
+          },
+        ],
+      ],
+    } as unknown as HighlighterCore
+
+    // MAX_CACHE is 5000; 5200 distinct lines guarantees the earliest is evicted.
+    for (let i = 0; i < 5200; i += 1) {
+      tokenizeLineCached(stub, `evict-${i}`, 'eviction-test')
+    }
+
+    // The oldest line is gone, the newest survives — no wholesale clear.
+    expect(cachedTokens('eviction-test', 'evict-0')).toBeUndefined()
+    expect(cachedTokens('eviction-test', 'evict-5199')).toBeDefined()
+  })
 })

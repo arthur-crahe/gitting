@@ -1,3 +1,5 @@
+import { lastPathSegment } from '../../../lib/path'
+
 /**
  * Maps a file extension to a Shiki language id. Only the grammars bundled by
  * `lib/highlighter.ts` appear here — an unmapped file falls back to plain,
@@ -31,9 +33,10 @@ const EXT_TO_LANG: Record<string, string> = {
 
 /** The Shiki language id for a repo-relative path, or `null` if unsupported. */
 export function langForPath(path: string): string | null {
-  const dot = path.lastIndexOf('.')
+  const name = lastPathSegment(path)
+  const dot = name.lastIndexOf('.')
   if (dot === -1) {
     return null
   }
-  return EXT_TO_LANG[path.slice(dot + 1).toLowerCase()] ?? null
+  return EXT_TO_LANG[name.slice(dot + 1).toLowerCase()] ?? null
 }

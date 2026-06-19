@@ -22,10 +22,36 @@ function emptyReason(file: DiffFile): string {
   if (file.changeKind === 'renamed') {
     return 'Fichier renommé.'
   }
+  if (file.oldMode === '160000' || file.newMode === '160000') {
+    return 'Sous-module — pas d’aperçu ligne à ligne.'
+  }
   if (file.oldMode && file.newMode && file.oldMode !== file.newMode) {
     return `Mode modifié : ${file.oldMode} → ${file.newMode}.`
   }
   return 'Aucune modification de contenu.'
+}
+
+/**
+ * Per-file layout metrics derived once over the hunks: the widest line (in
+ * characters) sizes the horizontal scroll extent — stable no matter which rows
+ * the virtualizer has mounted — and the highest line number sizes the gutter, so
+ * a 5-digit number can't overflow into the sign column.
+ */
+function layoutMetrics(file: DiffFile): { maxCols: number; noDigits: number } {
+  let maxCols = 0
+  let maxNo = 0
+  for (const hunk of file.hunks) {
+    for (const line of hunk.lines) {
+      if (line.content.length > maxCols) {
+        maxCols = line.content.length
+      }
+      const no = Math.max(line.oldNo ?? 0, line.newNo ?? 0)
+      if (no > maxNo) {
+        maxNo = no
+      }
+    }
+  }
+  return { maxCols, noDigits: Math.max(2, String(maxNo).length) }
 }
 
 /**
@@ -42,6 +68,7 @@ export function DiffView({ file }: { file: DiffFile }) {
   const highlighter = useHighlighter()
   const lang = useMemo(() => langForPath(file.path), [file.path])
   const rows = useMemo(() => flattenHunks(file), [file])
+  const { maxCols, noDigits } = useMemo(() => layoutMetrics(file), [file])
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
@@ -61,9 +88,21 @@ export function DiffView({ file }: { file: DiffFile }) {
     <div
       ref={scrollRef}
       className="diff-scroll"
-      style={{ '--diff-row-height': `${ROW_HEIGHT}px` } as CSSProperties}
+      style={
+        {
+          '--diff-row-height': `${ROW_HEIGHT}px`,
+          '--diff-no-width': `calc(${noDigits}ch + 8px)`,
+        } as CSSProperties
+      }
     >
-      <div className="diff-sizer" style={{ height: virtualizer.getTotalSize() }}>
+      <div
+        className="diff-sizer"
+        style={{
+          height: virtualizer.getTotalSize(),
+          // gutters (2 number columns + the 2ch sign) + the widest content line.
+          width: `calc(${2 * noDigits + 2 + maxCols}ch + 16px)`,
+        }}
+      >
         {virtualizer.getVirtualItems().map((item) => {
           const row = rows[item.index]
           if (!row) {
