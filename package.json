@@ -21,6 +21,8 @@
   },
   "dependencies": {
     "@radix-ui/themes": "^3.3.0",
+    "@shikijs/langs": "^4.2.0",
+    "@shikijs/themes": "^4.2.0",
     "@tanstack/react-virtual": "^3.14.3",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.4.0",
@@ -28,6 +30,7 @@
     "@tauri-apps/plugin-updater": "^2.10.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "shiki": "^4.2.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

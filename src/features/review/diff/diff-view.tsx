@@ -4,6 +4,8 @@ import { type CSSProperties, useMemo, useRef } from 'react'
 import type { DiffFile } from '../../../lib/git'
 import { DiffLineRow } from './diff-line'
 import { flattenHunks } from './flatten-hunks'
+import { langForPath } from './lang'
+import { useHighlighter } from './use-highlighter'
 
 /** Fixed row height (px). Diff lines never wrap, so the height is constant —
  * no measurement, which keeps virtualization cheap and deterministic. */
@@ -37,6 +39,8 @@ function emptyReason(file: DiffFile): string {
  */
 export function DiffView({ file }: { file: DiffFile }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const highlighter = useHighlighter()
+  const lang = useMemo(() => langForPath(file.path), [file.path])
   const rows = useMemo(() => flattenHunks(file), [file])
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -74,7 +78,7 @@ export function DiffView({ file }: { file: DiffFile }) {
               {row.type === 'header' ? (
                 <div className="diff-hunk-head">{row.text}</div>
               ) : (
-                <DiffLineRow line={row.line} />
+                <DiffLineRow line={row.line} highlighter={highlighter} lang={lang} />
               )}
             </div>
           )

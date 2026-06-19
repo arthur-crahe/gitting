@@ -800,6 +800,15 @@ body {
   font: inherit;
 }
 
+/* Shiki token: per-theme colors carried as CSS vars, switched by Radix's .dark. */
+.diff-tok {
+  color: var(--sl, inherit);
+}
+
+.dark .diff-tok {
+  color: var(--sd, inherit);
+}
+
 .diff-line--add {
   background: var(--green-a3);
 }
