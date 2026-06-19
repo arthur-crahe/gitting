@@ -21,22 +21,11 @@ use super::{ChangeKind, RepoStatus, StatusEntry};
 pub fn read_status(path: &Path) -> Result<RepoStatus, GitError> {
     let repo = super::repo::discover(path)?;
 
-    let iter = repo
-        .status(gix::progress::Discard)
-        .map_err(|e| GitError::Status(e.to_string()))?
-        // Detect index↔worktree renames so an unstaged rename collapses into a
-        // single `Renamed` row, as on the staged side; without it the rename
-        // shows as a deletion plus an untracked addition.
-        .index_worktree_rewrites(Some(gix::diff::Rewrites::default()))
-        .into_iter(None::<BString>)
-        .map_err(|e| GitError::Status(e.to_string()))?;
-
     let mut unstaged = Vec::new();
     let mut staged = Vec::new();
 
-    for item in iter {
-        let item = item.map_err(|e| GitError::Status(e.to_string()))?;
-        match item {
+    for item in status_iter(&repo)? {
+        match item? {
             // Staged: HEAD-tree vs. index.
             status::Item::TreeIndex(change) => {
                 let (location, ..) = change.fields();
@@ -91,6 +80,24 @@ pub fn read_status(path: &Path) -> Result<RepoStatus, GitError> {
     staged.sort_by(|a, b| a.path.cmp(&b.path));
 
     Ok(RepoStatus { unstaged, staged })
+}
+
+/// The configured `gix` status iterator shared by the file list ([`read_status`])
+/// and the per-file diffs ([`super::diff`]), so both classify and collapse
+/// entries identically — same index↔worktree rename detection, so an unstaged
+/// rename collapses into a single `Renamed` row instead of a deletion plus an
+/// untracked addition. Each item is a [`Result`]; a mid-iteration failure
+/// surfaces as a [`GitError::Status`] rather than silently truncating the walk.
+pub(super) fn status_iter(
+    repo: &gix::Repository,
+) -> Result<impl Iterator<Item = Result<status::Item, GitError>> + '_, GitError> {
+    let iter = repo
+        .status(gix::progress::Discard)
+        .map_err(|e| GitError::Status(e.to_string()))?
+        .index_worktree_rewrites(Some(gix::diff::Rewrites::default()))
+        .into_iter(None::<BString>)
+        .map_err(|e| GitError::Status(e.to_string()))?;
+    Ok(iter.map(|item| item.map_err(|e| GitError::Status(e.to_string()))))
 }
 
 /// Maps an index-vs-worktree entry status to a [`ChangeKind`], or `None` for a

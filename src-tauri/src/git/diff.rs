@@ -22,7 +22,7 @@ use gix::status::{self, index_worktree::Item as WorktreeItem};
 use gix::ObjectId;
 
 use super::error::GitError;
-use super::status::{path_string, worktree_kind};
+use super::status::{path_string, status_iter, worktree_kind};
 use super::{ChangeKind, DiffFile, DiffLineKind, Hunk, Line};
 
 /// An index-entry file mode, as carried by both status sides.
@@ -41,8 +41,8 @@ pub fn diff_staged(path: &Path) -> Result<Vec<DiffFile>, GitError> {
         .map_err(|e| GitError::Diff(e.to_string()))?;
 
     let mut out = Vec::new();
-    for item in status_items(&repo)? {
-        if let status::Item::TreeIndex(change) = item {
+    for item in status_iter(&repo)? {
+        if let status::Item::TreeIndex(change) = item? {
             out.push(staged_file(&repo, &mut cache, change, null)?);
         }
     }
@@ -69,8 +69,8 @@ pub fn diff_unstaged(path: &Path) -> Result<Vec<DiffFile>, GitError> {
         .map_err(|e| GitError::Diff(e.to_string()))?;
 
     let mut out = Vec::new();
-    for item in status_items(&repo)? {
-        if let status::Item::IndexWorktree(item) = item {
+    for item in status_iter(&repo)? {
+        if let status::Item::IndexWorktree(item) = item? {
             if let Some(file) = unstaged_file(&repo, &mut cache, item, null)? {
                 out.push(file);
             }
@@ -78,23 +78,6 @@ pub fn diff_unstaged(path: &Path) -> Result<Vec<DiffFile>, GitError> {
     }
     out.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(out)
-}
-
-/// Drives the `gix` status iterator with the same configuration as
-/// [`super::status::read_status`] — including index↔worktree rename detection —
-/// so the diff classifies and collapses entries exactly as the file list does.
-fn status_items(
-    repo: &gix::Repository,
-) -> Result<impl Iterator<Item = status::Item> + '_, GitError> {
-    let iter = repo
-        .status(gix::progress::Discard)
-        .map_err(|e| GitError::Diff(e.to_string()))?
-        .index_worktree_rewrites(Some(gix::diff::Rewrites::default()))
-        .into_iter(None::<gix::bstr::BString>)
-        .map_err(|e| GitError::Diff(e.to_string()))?;
-    // Surface a mid-iteration failure as an empty tail rather than a panic; the
-    // common path yields clean items.
-    Ok(iter.map_while(Result::ok))
 }
 
 /// Lowers one staged change (HEAD-tree → index) into a [`DiffFile`].
@@ -239,6 +222,20 @@ fn assemble(
         .or_else(|| old.and_then(|(_, m)| entry_kind(m)))
         .unwrap_or(EntryKind::Blob);
 
+    // A gitlink/submodule (`Commit`) or directory (`Tree`) entry has no blob the
+    // diff pipeline can open — `set_resource` rejects those modes. List it with
+    // its modes but no line-by-line hunks, alongside binaries and conflicts.
+    if matches!(kind, EntryKind::Commit | EntryKind::Tree) {
+        return Ok(DiffFile {
+            path,
+            change_kind,
+            old_mode,
+            new_mode,
+            is_binary: false,
+            hunks: Vec::new(),
+        });
+    }
+
     let rela = path.as_bytes().as_bstr();
     cache
         .set_resource(old.map_or(null, |(id, _)| id), kind, rela, ResourceKind::OldOrSource, &repo.objects)
@@ -319,8 +316,9 @@ impl ConsumeHunk for HunkCollector {
     }
 }
 
-/// The `EntryKind` of an index mode, or `None` for a gitlink/submodule the blob
-/// pipeline cannot diff.
+/// The `EntryKind` of an index mode, or `None` for a mode with no tree-entry
+/// equivalent. A gitlink yields `Some(EntryKind::Commit)`, so callers must guard
+/// non-blob kinds before handing the resource to the blob pipeline.
 fn entry_kind(mode: EntryMode) -> Option<EntryKind> {
     mode.to_tree_entry_mode().map(|m| m.kind())
 }
@@ -520,5 +518,28 @@ mod tests {
         let file = only(&files);
         assert!(file.is_binary, "binary content must be flagged");
         assert!(file.hunks.is_empty(), "no hunks for a binary file");
+    }
+
+    #[test]
+    fn gitlink_is_listed_without_erroring_the_whole_section() {
+        let repo = TempRepo::init();
+        repo.write("a.txt", "x\n");
+        repo.stage("a.txt");
+        // A gitlink (submodule commit pointer) staged via a fake commit id. The
+        // blob pipeline cannot open mode 160000, which must not blank the diff.
+        repo.git(&[
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            "160000,0000000000000000000000000000000000000001,sub",
+        ]);
+
+        let staged = diff_staged(repo.path()).expect("a gitlink must not error the diff");
+        let sub = staged.iter().find(|f| f.path == "sub").expect("gitlink listed");
+        assert!(matches!(sub.change_kind, ChangeKind::Added));
+        assert_eq!(sub.new_mode.as_deref(), Some("160000"));
+        assert!(sub.hunks.is_empty(), "no hunks for a gitlink");
+        // The sibling file still carries its diff — the section was not abandoned.
+        assert!(staged.iter().any(|f| f.path == "a.txt" && !f.hunks.is_empty()));
     }
 }

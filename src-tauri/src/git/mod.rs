@@ -2,9 +2,10 @@
 //! dependency and no text-output parsing.
 //!
 //! The shared, `serde`-serialized data shapes live here; the submodules hold the
-//! `gix` calls: [`repo`] (open/discover + identity) and [`status`] (the two
-//! review sections). Index writes (stage/unstage) are kept out of this module —
-//! they belong in an isolated shell-out, per `CLAUDE.md`.
+//! `gix` calls: [`repo`] (open/discover + identity), [`status`] (the two review
+//! sections) and [`diff`] (their per-file hunks). Index writes (stage/unstage)
+//! are isolated in [`index_write`] behind the `IndexWriter` trait — the one
+//! place that shells out to the `git` binary, per `CLAUDE.md`.
 
 mod diff;
 mod error;
@@ -101,7 +102,8 @@ pub struct Line {
     pub old_no: Option<u32>,
     /// 1-based line number on the new side, or `None` for a deleted line.
     pub new_no: Option<u32>,
-    /// The line text, newline excluded.
+    /// The line text, newline excluded — decoded lossily as UTF-8, so invalid
+    /// bytes in a non-binary file surface as U+FFFD.
     pub content: String,
 }
 
@@ -140,7 +142,8 @@ pub struct DiffFile {
     pub new_mode: Option<String>,
     /// Whether either side is binary, in which case no hunks are produced.
     pub is_binary: bool,
-    /// The diff hunks, in path order; empty for binary/conflict/mode-only files.
+    /// The diff hunks, in file order; empty for a binary, conflict, submodule or
+    /// mode-only file.
     pub hunks: Vec<Hunk>,
 }
 
