@@ -4,7 +4,6 @@ import { ACCENT_COLORS, useThemeStore } from './use-theme-store'
 describe('useThemeStore', () => {
   beforeEach(() => {
     localStorage.clear()
-    // Reset to a known baseline before each test.
     useThemeStore.setState({ appearance: 'dark', accent: 'iris' })
   })
 
