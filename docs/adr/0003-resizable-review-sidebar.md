@@ -75,7 +75,7 @@ Unstylable native grabber (fights the sober/Radix direction), **no** a11y semant
 New single-concern store `src/stores/use-sidebar-store.ts`, mirroring `use-view-store.ts`:
 
 - Key `gitting.sidebarWidth`, read/written via `readStorage`/`writeStorage` (best-effort; tolerates jsdom / hardened WebView / private mode).
-- `width: number`, `setWidth(px)` which **clamps**, persists, then `set`; `reset()` → `setWidth(DEFAULT_WIDTH)`.
+- `width: number`, `setWidth(px)` which **clamps**, persists, then `set`; `reset()` sets the width to `DEFAULT_WIDTH` and persists it (the clamp is a no-op on the in-bounds default).
 - `initialWidth()`: read storage, `Number.parseInt`, keep only `Number.isFinite`, **clamp on load** (a corrupt/out-of-range stored value can never produce an invalid pane), else fall back to the default — same shape as `initialMode()`.
 
 Bounds live as exported constants in `src/features/review/resize-utils.ts` (single source, reused by the drag math, the keyboard, the store, and the tests — no magic numbers): `MIN_WIDTH = 240`, `MAX_WIDTH = 560`, `DEFAULT_WIDTH = 320`, `STEP = 16`. **MAX is a fixed px**, not a ratio: a ratio needs the live container width (ResizeObserver), is untestable in jsdom, and the diff pane is the priority — a hard cap protects it without coupling to the viewport. The clamp (applied on every mutation and on load) is the single source of truth for the value; CSS carries **no** competing `min-width`/`max-width` on the pane (no duplicated bounds).
@@ -107,7 +107,7 @@ Mechanics: `onPointerDown` (guard `e.button === 0`) records `startX` (`clientX`)
 
 `.review-split__list` becomes a flex column (padding 0, **border-right removed** — the handle is now the sole visual boundary, no double line), `flex: 0 0 var(--sidebar-width, 320px)`:
 
-- `.review-split__list-head` — `flex: 0 0 auto`, padding `8px 12px`, `border-bottom: 1px solid var(--gray-a4)`; holds `<ViewModeToggle size="1" />` and the file total (`status.staged.length + status.unstaged.length`).
+- `.review-split__list-head` — `flex: 0 0 auto`, padding `8px 12px`, `border-bottom: 1px solid var(--gray-a4)`; holds `<ViewModeToggle />` (its `SegmentedControl` is fixed at `size="1"`) and the file total (`status.staged.length + status.unstaged.length`).
 - `.review-split__scroll` — `flex: 1 1 auto; min-height: 0; overflow: auto`, padding `8px 12px`, carrying the thin scrollbar tokens (moved off `.review-split__list`); wraps the two `StatusSection`.
 
 DOM order inside `.review-split`: list, handle, diff (direct siblings). `.review-split__diff` stays `flex: 1 1 auto; min-width: 0` (the flex floor the future virtualizer relies on). The handle `.review-split__handle`: `flex: 0 0 6px` with an enlarged hit area (~8–10px, WebKitGTK 1px hit-testing is unreliable), `cursor: col-resize`, `touch-action: none`, permanent `user-select: none`, background `var(--gray-a4)`, hover/active `var(--accent-a7)`/`--accent-8`, a clearly visible `:focus-visible` outline (≥2px, offset, contrast on both themes). `.review-split.is-resizing` sets `cursor: col-resize; user-select: none`, and `.is-resizing .review-split__diff { pointer-events: none }` — a belt-and-suspenders against the scrollable diff container swallowing `pointermove` if capture ever fails (the diff is a virtualized DOM list, not an iframe).
