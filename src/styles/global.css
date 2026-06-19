@@ -569,12 +569,35 @@ body {
   overflow: hidden;
 }
 
+/* The list pane is a column: a pinned header over an independent scroller. */
 .review-split__list {
+  display: flex;
+  flex-direction: column;
   flex: 0 0 320px;
   min-width: 240px;
+  border-right: 1px solid var(--gray-a4);
+}
+
+.review-split__list-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--gray-a4);
+}
+
+.review-split__count {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.review-split__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 8px 12px;
-  border-right: 1px solid var(--gray-a4);
   scrollbar-width: thin;
   scrollbar-color: var(--gray-a6) transparent;
 }

@@ -131,6 +131,8 @@ export function ReviewView() {
     return null
   }
 
+  const fileCount = status.staged.length + status.unstaged.length
+
   return (
     <RowProvider value={actions}>
       <div className="review">
@@ -139,7 +141,6 @@ export function ReviewView() {
             Valider un fichier le déplace de « À reviewer » vers « Validé ».
           </Text>
           <Flex align="center" gap="2">
-            <ViewModeToggle />
             <Tooltip content="Rafraîchir">
               <IconButton
                 variant="ghost"
@@ -163,20 +164,28 @@ export function ReviewView() {
 
         <div className="review-split">
           <div className="review-split__list">
-            <StatusSection
-              title="Validé"
-              section="staged"
-              entries={status.staged}
-              empty="Rien de validé pour l'instant."
-              mode={mode}
-            />
-            <StatusSection
-              title="À reviewer"
-              section="unstaged"
-              entries={status.unstaged}
-              empty="Tout a été relu."
-              mode={mode}
-            />
+            <div className="review-split__list-head">
+              <ViewModeToggle />
+              <Text size="1" color="gray" className="review-split__count">
+                {fileCount} fichier{fileCount > 1 ? 's' : ''}
+              </Text>
+            </div>
+            <div className="review-split__scroll">
+              <StatusSection
+                title="Validé"
+                section="staged"
+                entries={status.staged}
+                empty="Rien de validé pour l'instant."
+                mode={mode}
+              />
+              <StatusSection
+                title="À reviewer"
+                section="unstaged"
+                entries={status.unstaged}
+                empty="Tout a été relu."
+                mode={mode}
+              />
+            </div>
           </div>
           <div className="review-split__diff">
             <DiffPanel />
