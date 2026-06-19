@@ -18,6 +18,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::open_repo,
             commands::repo_status,
+            commands::diff_unstaged,
+            commands::diff_staged,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

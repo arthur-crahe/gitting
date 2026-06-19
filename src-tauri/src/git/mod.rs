@@ -6,6 +6,7 @@
 //! review sections). Index writes (stage/unstage) are kept out of this module —
 //! they belong in an isolated shell-out, per `CLAUDE.md`.
 
+mod diff;
 mod error;
 mod repo;
 mod status;
@@ -13,6 +14,7 @@ mod status;
 #[cfg(test)]
 mod test_support;
 
+pub use diff::{diff_staged, diff_unstaged};
 pub use error::GitError;
 pub use repo::open_repo;
 pub use status::read_status;
@@ -71,11 +73,8 @@ pub struct RepoStatus {
     pub staged: Vec<StatusEntry>,
 }
 
-// The diff wire types below gain their first constructor in `git/diff.rs`; the
-// `allow(dead_code)` is removed in that commit.
 /// The role of a single line within a diff hunk, mirrored as a TypeScript union.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DiffLineKind {
     /// Unchanged line, present on both sides.
@@ -91,7 +90,6 @@ pub enum DiffLineKind {
 /// `old_no` is `None` for an added line and `new_no` is `None` for a deleted
 /// line; a context line has both. `content` is the line text without its
 /// trailing newline.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Line {
@@ -106,7 +104,6 @@ pub struct Line {
 }
 
 /// A contiguous block of changed lines, matching a unified-diff `@@` header.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Hunk {
@@ -128,7 +125,6 @@ pub struct Hunk {
 /// `hunks` is empty when there is nothing to render line-by-line: a binary file
 /// (`is_binary`), an unresolved conflict, or a pure mode change (`old_mode` ≠
 /// `new_mode` with identical content).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiffFile {

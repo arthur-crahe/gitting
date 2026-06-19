@@ -96,7 +96,10 @@ pub fn read_status(path: &Path) -> Result<RepoStatus, GitError> {
 /// Maps an index-vs-worktree entry status to a [`ChangeKind`], or `None` for a
 /// `NeedsUpdate` entry — a stat-only refresh that is not a real content change
 /// and must not appear as a pending review item.
-fn worktree_kind(
+///
+/// Shared with [`super::diff`] so the unstaged file list and the unstaged diff
+/// classify entries identically.
+pub(super) fn worktree_kind(
     status: EntryStatus<(), gix::submodule::Status>,
 ) -> Option<ChangeKind> {
     match status {
@@ -113,8 +116,8 @@ fn worktree_kind(
 }
 
 /// Owned, lossy-UTF-8 rendering of a repo-relative path. Takes `&[u8]` so every
-/// `BStr`/`BString`/`Cow<BStr>` path coerces in.
-fn path_string(path: &[u8]) -> String {
+/// `BStr`/`BString`/`Cow<BStr>` path coerces in. Shared with [`super::diff`].
+pub(super) fn path_string(path: &[u8]) -> String {
     path.to_str_lossy().into_owned()
 }
 

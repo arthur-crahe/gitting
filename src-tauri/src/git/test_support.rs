@@ -40,6 +40,11 @@ impl TempRepo {
         std::fs::write(full, contents).expect("write file");
     }
 
+    /// Deletes `rel` from the working tree.
+    pub fn remove(&self, rel: &str) {
+        std::fs::remove_file(self.dir.path().join(rel)).expect("remove file");
+    }
+
     /// Stages `rel` into the index (`git add`).
     pub fn stage(&self, rel: &str) {
         self.git(&["add", "--", rel]);

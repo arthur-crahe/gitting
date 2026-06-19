@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use crate::git::{self, GitError, RepoInfo, RepoStatus};
+use crate::git::{self, DiffFile, GitError, RepoInfo, RepoStatus};
 
 /// Opens the repository enclosing `path` and returns its identity.
 #[tauri::command]
@@ -19,6 +19,18 @@ pub async fn open_repo(path: String) -> Result<RepoInfo, GitError> {
 #[tauri::command]
 pub async fn repo_status(path: String) -> Result<RepoStatus, GitError> {
     run(move || git::read_status(&PathBuf::from(path))).await
+}
+
+/// Reads the unstaged section's diff (index vs. working tree), per changed file.
+#[tauri::command]
+pub async fn diff_unstaged(path: String) -> Result<Vec<DiffFile>, GitError> {
+    run(move || git::diff_unstaged(&PathBuf::from(path))).await
+}
+
+/// Reads the staged section's diff (HEAD-tree vs. index), per changed file.
+#[tauri::command]
+pub async fn diff_staged(path: String) -> Result<Vec<DiffFile>, GitError> {
+    run(move || git::diff_staged(&PathBuf::from(path))).await
 }
 
 /// Runs a blocking git operation on the blocking pool, flattening a join panic
