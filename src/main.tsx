@@ -1,8 +1,8 @@
-import { Theme } from '@radix-ui/themes'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './app/app'
 import { ErrorBoundary } from './app/error-boundary'
+import { ThemeProvider } from './app/theme-provider'
 import '@radix-ui/themes/styles.css'
 import './styles/global.css'
 
@@ -13,10 +13,10 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <Theme appearance="dark" accentColor="iris" grayColor="slate" radius="medium">
+    <ThemeProvider>
       <ErrorBoundary>
         <App />
       </ErrorBoundary>
-    </Theme>
+    </ThemeProvider>
   </StrictMode>,
 )

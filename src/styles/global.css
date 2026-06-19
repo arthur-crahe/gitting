@@ -45,6 +45,39 @@ body {
   overflow: auto;
 }
 
+/* Slim footer carrying the running version; fused to the surface like the bar. */
+.app-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 28px;
+  padding-inline: 16px;
+  border-top: 1px solid var(--gray-a4);
+}
+
+/* Discreet, app-like scrollbars in the scrolling content region. */
+.app-content {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-a6) transparent;
+}
+
+.app-content::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.app-content::-webkit-scrollbar-thumb {
+  background-color: var(--gray-a5);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 8px;
+}
+
+.app-content::-webkit-scrollbar-thumb:hover {
+  background-color: var(--gray-a7);
+}
+
 /* ── Custom titlebar — seamless VSCode-style action bar ───────────────────── */
 
 /*
@@ -82,7 +115,16 @@ body {
 
 .titlebar__zone--right {
   flex: 0 0 auto;
-  gap: 4px;
+  gap: 6px;
+}
+
+/*
+ * Ghost icon buttons carry negative margins (for optical alignment in text);
+ * in this tight action row that makes neighbours overlap. Neutralize it here so
+ * the flex `gap` alone controls spacing.
+ */
+.titlebar__zone--right :where(.rt-IconButton) {
+  margin: 0;
 }
 
 /* Flexible middle: keeps the window draggable even if the clusters grow. */
@@ -252,4 +294,176 @@ body {
   width: 9px;
   height: 9px;
   cursor: nwse-resize;
+}
+
+/* ── Accent picker (titlebar) ─────────────────────────────────────────────── */
+
+/* The trigger swatch reflecting the current accent. */
+.accent-trigger {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--gray-a6);
+}
+
+.accent-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.accent-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--gray-a7);
+  transition:
+    transform 90ms ease,
+    box-shadow 90ms ease;
+}
+
+.accent-swatch:hover {
+  transform: scale(1.14);
+}
+
+/* The active accent gets a ring punched out from the panel background. */
+.accent-swatch[data-selected="true"] {
+  box-shadow:
+    0 0 0 2px var(--color-panel-solid),
+    0 0 0 4px var(--gray-12);
+}
+
+/* ── Welcome screen ───────────────────────────────────────────────────────── */
+
+.welcome {
+  padding-top: 11vh;
+}
+
+/* Rounded, accent-tinted brand mark above the title. */
+.welcome__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-4);
+  background: var(--accent-a3);
+  color: var(--accent-11);
+}
+
+.welcome__error {
+  max-width: 440px;
+}
+
+/* ── Review sections ──────────────────────────────────────────────────────── */
+
+/* The whole header is a disclosure button toggling the section. */
+.review-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.review-section__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.review-section__chevron {
+  flex: 0 0 auto;
+  color: var(--gray-a10);
+  transition:
+    transform 130ms ease,
+    color 130ms ease;
+}
+
+.review-section__chevron[data-open="false"] {
+  transform: rotate(-90deg);
+}
+
+.review-section__head:hover .review-section__chevron {
+  color: var(--gray-12);
+}
+
+.review-section__count {
+  font-variant-numeric: tabular-nums;
+}
+
+.review-section__divider {
+  height: 1px;
+  margin: 10px 0 4px;
+  background: var(--gray-a5);
+}
+
+.review-section__empty {
+  display: block;
+  padding: 6px 8px;
+}
+
+/* Negative inline margin so row hover backgrounds extend past the text column. */
+.review-section__list {
+  margin-inline: -8px;
+}
+
+/* ── File rows ────────────────────────────────────────────────────────────── */
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 8px;
+  border-radius: var(--radius-2);
+  cursor: default;
+}
+
+.file-row:hover {
+  background: var(--gray-a3);
+}
+
+/* Fixed-width, tabular status letter so paths align in a clean column. */
+.status-glyph {
+  flex: 0 0 auto;
+  width: 16px;
+  text-align: center;
+  font-family: var(--code-font-family, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A flex row so the directory truncates while the file name stays fully
+ * visible — the meaningful part of the path never disappears. */
+.file-row__path {
+  display: flex;
+  min-width: 0;
+  font-family: var(--code-font-family, ui-monospace, monospace);
+  font-size: var(--font-size-2);
+}
+
+.file-row__dir {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--gray-a10);
+}
+
+.file-row__name {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: var(--gray-12);
 }

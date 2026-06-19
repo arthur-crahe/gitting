@@ -18,10 +18,9 @@ export interface UpdateStoreState {
   /** Human-readable error message when {@link phase} is `'error'`. */
   error: string | null
   /**
-   * Query the endpoint. A `manual` check (user-initiated) confirms when already
-   * up to date and surfaces errors; a silent launch check (`manual` false, the
-   * default) only ever reveals an available update — it stays quiet when the app
-   * is current or the check fails (e.g. offline). No-ops outside Tauri/while busy.
+   * Query the endpoint. A `manual` (user-initiated) check confirms when up to date
+   * and surfaces errors; a silent launch check only reveals an available update,
+   * staying quiet otherwise. No-op outside Tauri or while busy.
    */
   check: (manual?: boolean) => Promise<void>
   /** Download, install and relaunch the available update. */
