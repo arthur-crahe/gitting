@@ -37,6 +37,7 @@ async function flush() {
 describe('useDiffStore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useDiffStore.getState().invalidate()
     useDiffStore.setState({ selected: null, diff: null, phase: 'idle', error: null })
   })
 
@@ -69,6 +70,29 @@ describe('useDiffStore', () => {
     const s = useDiffStore.getState()
     expect(s.phase).toBe('ready')
     expect(s.diff).toBeNull()
+  })
+
+  it('caches a section so switching files makes no extra backend call', async () => {
+    const fileB: DiffFile = { ...FILE_A, path: 'src/b.ts' }
+    mockedUnstaged.mockResolvedValue([FILE_A, fileB])
+
+    await useDiffStore.getState().select('/repo', { section: 'unstaged', path: 'src/a.ts' })
+    await useDiffStore.getState().select('/repo', { section: 'unstaged', path: 'src/b.ts' })
+
+    expect(mockedUnstaged).toHaveBeenCalledTimes(1)
+    expect(useDiffStore.getState().diff).toEqual(fileB)
+    // A cache hit resolves straight to ready, with no loading flash.
+    expect(useDiffStore.getState().phase).toBe('ready')
+  })
+
+  it('invalidate forces the next selection to refetch', async () => {
+    mockedUnstaged.mockResolvedValue([FILE_A])
+    await useDiffStore.getState().select('/repo', { section: 'unstaged', path: 'src/a.ts' })
+    expect(mockedUnstaged).toHaveBeenCalledTimes(1)
+
+    useDiffStore.getState().invalidate()
+    await useDiffStore.getState().select('/repo', { section: 'unstaged', path: 'src/a.ts' })
+    expect(mockedUnstaged).toHaveBeenCalledTimes(2)
   })
 
   it('moves to error when the load fails', async () => {

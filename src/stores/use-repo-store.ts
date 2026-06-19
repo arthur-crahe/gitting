@@ -75,6 +75,11 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
       const status = await readStatus(info.root)
       if (token !== requestToken) return
       set({ status, phase: 'ready', error: null })
+      // The working tree changed: drop the cached section diffs and re-align the
+      // open diff (its content may have changed, or it may have moved sections).
+      const diff = useDiffStore.getState()
+      diff.invalidate()
+      diff.reconcile(info.root, status)
     } catch (error) {
       if (token !== requestToken) return
       // Keep the repo open on a failed re-read; surface the error inline.
@@ -87,9 +92,10 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
 }))
 
 /**
- * Runs an index write (`stage`/`unstage`) for `file`, then refreshes the status
- * and re-aligns the diff selection so the panel follows the file across
- * sections. A failure surfaces inline without disturbing the open repo.
+ * Runs an index write (`stage`/`unstage`) for `file`, then refreshes — which
+ * invalidates the diff cache and re-aligns the selection so the panel follows
+ * the file across sections. A failure surfaces inline without disturbing the
+ * open repo.
  */
 async function mutateIndex(
   get: () => RepoStoreState,
@@ -104,10 +110,6 @@ async function mutateIndex(
   try {
     await write(info.root, file)
     await get().refresh()
-    const { status } = get()
-    if (status) {
-      useDiffStore.getState().reconcile(info.root, status)
-    }
   } catch (error) {
     set({ error: toMessage(error) })
   }

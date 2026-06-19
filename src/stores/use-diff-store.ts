@@ -23,10 +23,12 @@ export interface DiffStoreState {
   phase: DiffPhase
   /** Message from the last failed load, else `null`. */
   error: string | null
-  /** Select `selection` and load its diff from the repo at `repoRoot`. */
+  /** Select `selection` and show its diff from the repo at `repoRoot`. */
   select: (repoRoot: string, selection: DiffSelection) => Promise<void>
   /** Re-align the selection with a fresh `status` after a stage/unstage/refresh. */
   reconcile: (repoRoot: string, status: RepoStatus) => void
+  /** Drop the cached section diffs (call when the working tree changes). */
+  invalidate: () => void
   /** Close the panel. */
   clear: () => void
 }
@@ -39,10 +41,20 @@ export interface DiffStoreState {
 let requestToken = 0
 
 /**
+ * Per-section cache of the last fetched diffs. A diff command computes the whole
+ * section at once, so once fetched, switching between files in that section is a
+ * synchronous lookup — no repeated backend round-trip. Invalidated whenever the
+ * status changes ({@link DiffStoreState.invalidate}).
+ */
+const sectionCache: Record<DiffSection, readonly DiffFile[] | null> = {
+  staged: null,
+  unstaged: null,
+}
+
+/**
  * Store for the diff panel: which file is open and the diff loaded for it. The
- * diff is fetched per selection from the section's command ({@link diffUnstaged}
- * / {@link diffStaged}) and matched by path, so the panel always shows exactly
- * the hunks of the chosen section — never a re-diff. {@link
+ * diff is matched by path from the section's command output (never a re-diff),
+ * cached per section so switching files is instant after the first fetch. {@link
  * DiffStoreState.reconcile} keeps the selection meaningful after the status
  * changes: it follows a file across sections when it is staged or unstaged, and
  * closes the panel when the file is gone.
@@ -55,15 +67,30 @@ export const useDiffStore = create<DiffStoreState>((set, get) => ({
 
   select: async (repoRoot, selection) => {
     const token = ++requestToken
-    set({ selected: selection, phase: 'loading', error: null })
+    set({ selected: selection, error: null })
+
+    // Cache hit: resolve synchronously, no loading flash.
+    const cached = sectionCache[selection.section]
+    if (cached) {
+      set({ diff: cached.find((file) => file.path === selection.path) ?? null, phase: 'ready' })
+      return
+    }
+
+    set({ phase: 'loading' })
     try {
       const files =
         selection.section === 'staged' ? await diffStaged(repoRoot) : await diffUnstaged(repoRoot)
-      if (token !== requestToken) return
-      const diff = files.find((file) => file.path === selection.path) ?? null
-      set({ diff, phase: 'ready' })
+      // Guard the cache write too: a superseded request must not overwrite the
+      // cache with its stale result.
+      if (token !== requestToken) {
+        return
+      }
+      sectionCache[selection.section] = files
+      set({ diff: files.find((file) => file.path === selection.path) ?? null, phase: 'ready' })
     } catch (error) {
-      if (token !== requestToken) return
+      if (token !== requestToken) {
+        return
+      }
       set({ diff: null, phase: 'error', error: toMessage(error) })
     }
   },
@@ -90,6 +117,11 @@ export const useDiffStore = create<DiffStoreState>((set, get) => ({
     } else {
       get().clear()
     }
+  },
+
+  invalidate: () => {
+    sectionCache.staged = null
+    sectionCache.unstaged = null
   },
 
   clear: () => set({ selected: null, diff: null, phase: 'idle', error: null }),
