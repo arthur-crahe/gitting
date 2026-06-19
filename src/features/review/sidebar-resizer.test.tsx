@@ -80,4 +80,19 @@ describe('SidebarResizer', () => {
     fireEvent.doubleClick(screen.getByRole('separator'))
     expect(useSidebarStore.getState().width).toBe(DEFAULT_WIDTH)
   })
+
+  it('commits and drops the resizing state on a cancelled gesture', () => {
+    render(<Harness />)
+    const handle = screen.getByRole('separator')
+    const split = handle.closest('.review-split')
+
+    fireEvent.pointerDown(handle, { button: 0, clientX: 100, pointerId: 1 })
+    expect(split).toHaveClass('is-resizing')
+    fireEvent.pointerMove(handle, { clientX: 140, pointerId: 1 })
+    fireEvent.pointerCancel(handle, { clientX: 140, pointerId: 1 })
+
+    // A cancel shares endDrag: width still commits and the class is removed.
+    expect(useSidebarStore.getState().width).toBe(DEFAULT_WIDTH + 40)
+    expect(split).not.toHaveClass('is-resizing')
+  })
 })

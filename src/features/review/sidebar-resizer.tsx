@@ -2,6 +2,11 @@ import { type KeyboardEvent, type PointerEvent, type RefObject, useRef } from 'r
 import { useSidebarStore } from '../../stores/use-sidebar-store'
 import { MAX_WIDTH, MIN_WIDTH, nextWidthForKey, widthFromDrag } from './resize-utils'
 
+/** The split container carrying the `.is-resizing` cursor/text-select guard. */
+function splitOf(handle: Element): Element | null {
+  return handle.closest('.review-split')
+}
+
 /** Live drag state, kept in a ref so pointer moves never re-render React. */
 interface Drag {
   /** Pointer x at pointer-down. */
@@ -40,7 +45,7 @@ export function SidebarResizer({ sidebarRef }: { sidebarRef: RefObject<HTMLEleme
     const startWidth = useSidebarStore.getState().width
     drag.current = { startX: event.clientX, startWidth, latest: startWidth }
     // Synchronous, no setState: arm the resize cursor / text-select guard.
-    event.currentTarget.parentElement?.classList.add('is-resizing')
+    splitOf(event.currentTarget)?.classList.add('is-resizing')
     event.currentTarget.setPointerCapture?.(event.pointerId)
   }
 
@@ -60,9 +65,13 @@ export function SidebarResizer({ sidebarRef }: { sidebarRef: RefObject<HTMLEleme
       return
     }
     drag.current = null
-    event.currentTarget.parentElement?.classList.remove('is-resizing')
-    event.currentTarget.releasePointerCapture?.(event.pointerId)
+    splitOf(event.currentTarget)?.classList.remove('is-resizing')
+    // Commit before releasing capture so a release on an already-inactive
+    // pointer (e.g. a cancelled gesture) can never skip the store write.
     setWidth(state.latest)
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
