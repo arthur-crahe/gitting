@@ -569,13 +569,17 @@ body {
   overflow: hidden;
 }
 
-/* The list pane is a column: a pinned header over an independent scroller. */
+/*
+ * The list pane is a column: a pinned header over an independent scroller. Its
+ * width is driven by the --sidebar-width custom property (set inline from the
+ * store, mutated directly during a drag — see ADR 0003); the JS clamp is the
+ * single source of truth, so no min/max-width is duplicated here. The handle,
+ * not a border, is the visual boundary with the diff.
+ */
 .review-split__list {
   display: flex;
   flex-direction: column;
-  flex: 0 0 320px;
-  min-width: 240px;
-  border-right: 1px solid var(--gray-a4);
+  flex: 0 0 var(--sidebar-width, 320px);
 }
 
 .review-split__list-head {
@@ -605,7 +609,50 @@ body {
 .review-split__diff {
   display: flex;
   flex: 1 1 auto;
+  /* The flex floor the diff (and its future virtualizer) needs to shrink. */
   min-width: 0;
+  /* Isolate the diff's relayout from the neighbouring sidebar resize. */
+  contain: layout;
+}
+
+/* The draggable separator: the sole visual boundary between list and diff. */
+.review-split__handle {
+  flex: 0 0 6px;
+  align-self: stretch;
+  /* Enlarged hit area beyond the 6px line (WebKitGTK 1px hit-testing is poor). */
+  margin-inline: -2px;
+  padding-inline: 2px;
+  background-clip: content-box;
+  background-color: var(--gray-a4);
+  cursor: col-resize;
+  /* Keep gestures and text selection out of the drag. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background-color 90ms ease;
+}
+
+.review-split__handle:hover,
+.review-split__handle:active {
+  background-color: var(--accent-a7);
+}
+
+.review-split__handle:focus-visible {
+  outline: 2px solid var(--accent-8);
+  outline-offset: -1px;
+  background-color: var(--accent-a7);
+}
+
+/* During a drag the cursor is owned by the whole split, and the diff ignores
+ * pointer moves so a scrollable child can't swallow them if capture is lost. */
+.review-split.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.review-split.is-resizing .review-split__diff {
+  pointer-events: none;
 }
 
 /* The select target fills the row so the trailing action sits flush right. */

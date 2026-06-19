@@ -1,16 +1,18 @@
 import { Callout, Flex, Heading, IconButton, Text, Tooltip } from '@radix-ui/themes'
-import { useMemo, useState } from 'react'
+import { type CSSProperties, useMemo, useRef, useState } from 'react'
 import { Chevron, RefreshIcon } from '../../components/icons'
 import type { StatusEntry } from '../../lib/git'
 import { splitPath } from '../../lib/path'
 import type { DiffSection } from '../../stores/use-diff-store'
 import { useDiffStore } from '../../stores/use-diff-store'
 import { useRepoStore } from '../../stores/use-repo-store'
+import { useSidebarStore } from '../../stores/use-sidebar-store'
 import { useViewStore, type ViewMode } from '../../stores/use-view-store'
 import { RepoPicker } from '../repo/repo-picker'
 import { changeKindGlyph } from './change-kind'
 import { DiffPanel } from './diff/diff-panel'
 import { isSelected, type RowActions, RowProvider, useRowActions } from './row-context'
+import { SidebarResizer } from './sidebar-resizer'
 import { StatusGlyph } from './status-glyph'
 import { FileTree } from './tree-view'
 import { ValidateButton } from './validate-button'
@@ -108,8 +110,10 @@ export function ReviewView() {
   const unstage = useRepoStore((s) => s.unstage)
   const error = useRepoStore((s) => s.error)
   const mode = useViewStore((s) => s.mode)
+  const sidebarWidth = useSidebarStore((s) => s.width)
   const selected = useDiffStore((s) => s.selected)
   const select = useDiffStore((s) => s.select)
+  const sidebarRef = useRef<HTMLDivElement>(null)
 
   const root = info?.root ?? null
   const actions = useMemo<RowActions>(
@@ -163,7 +167,12 @@ export function ReviewView() {
         ) : null}
 
         <div className="review-split">
-          <div className="review-split__list">
+          <div
+            className="review-split__list"
+            id="review-sidebar"
+            ref={sidebarRef}
+            style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
+          >
             <div className="review-split__list-head">
               <ViewModeToggle />
               <Text size="1" color="gray" className="review-split__count">
@@ -187,6 +196,7 @@ export function ReviewView() {
               />
             </div>
           </div>
+          <SidebarResizer sidebarRef={sidebarRef} />
           <div className="review-split__diff">
             <DiffPanel />
           </div>
