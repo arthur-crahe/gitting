@@ -25,9 +25,12 @@ describe('reviewStats', () => {
     })
   })
 
-  it('is complete only when there is work and nothing remains', () => {
-    expect(reviewStats(status(4, 0)).complete).toBe(true)
-    expect(reviewStats(status(0, 0)).complete).toBe(false)
-    expect(reviewStats(status(0, 2)).complete).toBe(false)
+  it('is complete only when work was burned down in-session (nothing remains and the user validated here)', () => {
+    expect(reviewStats(status(4, 0), true).complete).toBe(true)
+    // A repo opened with pre-staged files (nothing validated here) is not a win.
+    expect(reviewStats(status(4, 0), false).complete).toBe(false)
+    expect(reviewStats(status(4, 0)).complete).toBe(false)
+    expect(reviewStats(status(0, 0), true).complete).toBe(false)
+    expect(reviewStats(status(0, 2), true).complete).toBe(false)
   })
 })

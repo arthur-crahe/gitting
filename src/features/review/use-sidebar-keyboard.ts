@@ -99,7 +99,15 @@ export function useSidebarKeyboard({ rootRef, filterRef, actions, clearFilter }:
       if (nextId) {
         actions.select(nextId.section, nextId.path)
       }
-      actions.act(id.section, id.path)
+      // Disarm the recovery latch if the write fails: no section change will
+      // arrive to consume it, so a later unrelated status change must not be able
+      // to fire it and yank focus to a row the user never acted on.
+      void Promise.resolve(actions.act(id.section, id.path)).then((underway) => {
+        if (!underway) {
+          recover.current = false
+          pendingFocus.current = null
+        }
+      })
     },
     [actions],
   )

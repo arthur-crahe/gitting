@@ -82,7 +82,7 @@ Semantic diff tints — two-layer (faint line wash + bright fill on changed toke
 | Delete — line wash | `--red-a3` | |
 | Delete — word highlight | `--red-a5` | |
 | Delete — sign / rail | `--red-11` / `--red-9` | |
-| Hunk header | `--accent-a2` bg + `--accent-a11` text | |
+| Hunk header | `--gtg-raised` bg + `--accent-a11` text (tint-only seam, no hairline) | |
 
 ### Typography
 
@@ -179,7 +179,7 @@ bg, swaps the validate slide for an instant color flash.
   kebab (no separate file count — the section badges carry it). Sticky section headers gain
   a hairline seam only once stuck (an IntersectionObserver sentinel — scroll-driven CSS is
   banned on WebKitGTK). Sections *À reviewer* (top, the active queue: full-strength title,
-  accent count **badge**, non-collapsible) / *Validé* (below, the archive: recessed title
+  accent count **badge**, collapsible, open by default) / *Validé* (below, the archive: recessed title
   `--gray-11`, plain count, collapsible & collapsed by default, basename recedes). Titles
   normal-case (never ALL-CAPS). Rows are **condensed ~22px** (VSCode-like): a colored
   **file-type icon** on the left (`@react-symbols/icons`, `file-type-icon.tsx`), the **name
@@ -236,5 +236,3 @@ only *within* already-paired lines).
 - `direction: rtl` left-ellipsis for the sidebar directory prefix: keep the basename in a
   separate element and the full path in `title`; verify leading-dot / `@scope` paths render
   acceptably (the neutral `/` can misplace), degrading to the title tooltip.
-</content>
-</invoke>

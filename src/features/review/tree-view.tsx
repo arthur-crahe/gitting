@@ -3,7 +3,6 @@ import { Chevron } from '../../components/icons'
 import type { StatusEntry } from '../../lib/git'
 import type { DiffSection } from '../../stores/use-diff-store'
 import { useRepoStore } from '../../stores/use-repo-store'
-import { changeKindGlyph } from './change-kind'
 import { buildFileTree, type FileNode, type TreeNode } from './file-tree'
 import { FileTypeIcon, FolderTypeIcon } from './file-type-icon'
 import { useIsSelected, useRowActions } from './row-context'
@@ -55,7 +54,6 @@ function TreeFile({
   const { select } = useRowActions()
   const selected = useIsSelected(section, node.entry.path)
   const pending = useRepoStore((s) => s.pendingPaths.has(node.entry.path))
-  const glyph = changeKindGlyph(node.entry.kind)
   return (
     <div
       className="tree-file"
@@ -72,7 +70,7 @@ function TreeFile({
         data-path={node.entry.path}
         tabIndex={-1}
         onClick={() => select(section, node.entry.path)}
-        title={`${glyph.label} — ${node.entry.path}`}
+        title={node.entry.path}
         aria-current={selected ? 'true' : undefined}
       >
         <FileTypeIcon name={node.name} />

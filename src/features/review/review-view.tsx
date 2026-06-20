@@ -34,9 +34,7 @@ export function ReviewView() {
           void select(root, { section, path })
         }
       },
-      act: (section, path) => {
-        void (section === 'unstaged' ? stage(path) : unstage(path))
-      },
+      act: (section, path) => (section === 'unstaged' ? stage(path) : unstage(path)),
     }),
     [root, select, stage, unstage],
   )

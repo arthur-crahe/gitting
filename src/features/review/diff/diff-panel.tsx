@@ -1,9 +1,11 @@
-import { CheckCircleIcon, DocumentIcon } from '../../../components/icons'
+import { DocumentIcon } from '../../../components/icons'
 import { countDiffLines } from '../../../lib/diff-stats'
 import { useDiffStore } from '../../../stores/use-diff-store'
 import { useRepoStore } from '../../../stores/use-repo-store'
+import { CompletionBeat } from '../completion-beat'
 import { reviewStats } from '../review-stats'
 import { StatusGlyph } from '../status-glyph'
+import { ValidateButton } from '../validate-button'
 import { DiffView } from './diff-view'
 
 /**
@@ -13,20 +15,13 @@ import { DiffView } from './diff-view'
  */
 function EmptyPane() {
   const status = useRepoStore((s) => s.status)
-  const { reviewed, total, complete } = reviewStats(status)
+  const reviewedHere = useRepoStore((s) => s.reviewedHere)
+  const { reviewed, total, complete } = reviewStats(status, reviewedHere)
 
   if (complete) {
     return (
       <div className="diff-panel diff-panel--empty">
-        <div className="review-complete">
-          <div className="review-complete__mark">
-            <CheckCircleIcon size={42} />
-          </div>
-          <div className="review-complete__title">Tout est relu</div>
-          <div className="review-complete__sub">
-            {reviewed} fichier{reviewed > 1 ? 's' : ''} validé{reviewed > 1 ? 's' : ''}
-          </div>
-        </div>
+        <CompletionBeat reviewed={reviewed} prefix="review-complete" iconSize={42} />
       </div>
     )
   }
@@ -71,12 +66,19 @@ export function DiffPanel() {
             {selected.path}
           </span>
         </span>
-        {stat ? (
-          <span className="diff-stat">
-            <span className="diff-stat__add">+{stat.add}</span>
-            <span className="diff-stat__del">−{stat.del}</span>
-          </span>
-        ) : null}
+        <span className="diff-panel__end">
+          {stat ? (
+            <span className="diff-stat">
+              <span className="diff-stat__add">+{stat.add}</span>
+              <span className="diff-stat__del">−{stat.del}</span>
+            </span>
+          ) : null}
+          <ValidateButton
+            section={selected.section}
+            path={selected.path}
+            className="diff-panel__validate"
+          />
+        </span>
       </div>
       <div className="diff-panel__body">
         {phase === 'error' ? (

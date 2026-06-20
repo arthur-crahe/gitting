@@ -40,6 +40,7 @@ describe('useRepoStore', () => {
       status: null,
       error: null,
       pendingPaths: new Set(),
+      reviewedHere: false,
     })
     useDiffStore.getState().reset()
   })
@@ -147,6 +148,44 @@ describe('useRepoStore', () => {
   it('stage is a no-op when no repository is open', async () => {
     await useRepoStore.getState().stage('x')
     expect(mockedStage).not.toHaveBeenCalled()
+  })
+
+  it('reports a committed validate as true and a failed write as false', async () => {
+    useRepoStore.setState({ phase: 'ready', info: INFO, status: STATUS })
+    mockedStatus.mockResolvedValue(STATUS)
+    mockedStage.mockResolvedValueOnce()
+    await expect(useRepoStore.getState().stage('src/a.ts')).resolves.toBe(true)
+
+    mockedStage.mockRejectedValueOnce(new Error('boom'))
+    await expect(useRepoStore.getState().stage('src/a.ts')).resolves.toBe(false)
+  })
+
+  it('arms reviewedHere on a successful validate and resets it when a repo is opened', async () => {
+    useRepoStore.setState({ phase: 'ready', info: INFO, status: STATUS, reviewedHere: false })
+    mockedStage.mockResolvedValue()
+    mockedStatus.mockResolvedValue({
+      unstaged: [],
+      staged: [{ path: 'src/a.ts', kind: 'modified' }],
+    })
+
+    await useRepoStore.getState().stage('src/a.ts')
+    expect(useRepoStore.getState().reviewedHere).toBe(true)
+
+    // Opening a repository clears the in-session flag, so a pre-staged repo can't
+    // inherit a stale "reviewed" state and fire a false completion.
+    mockedOpen.mockResolvedValue(INFO)
+    mockedStatus.mockResolvedValue(STATUS)
+    await useRepoStore.getState().open('/repo')
+    expect(useRepoStore.getState().reviewedHere).toBe(false)
+  })
+
+  it('does not arm reviewedHere on an unstage (un-validating is not reviewing)', async () => {
+    useRepoStore.setState({ phase: 'ready', info: INFO, status: STATUS, reviewedHere: false })
+    mockedUnstage.mockResolvedValue()
+    mockedStatus.mockResolvedValue(STATUS)
+
+    await useRepoStore.getState().unstage('src/b.ts')
+    expect(useRepoStore.getState().reviewedHere).toBe(false)
   })
 
   it('resets the diff store when a different repository is opened', async () => {

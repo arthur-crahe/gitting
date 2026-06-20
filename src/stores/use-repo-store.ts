@@ -27,16 +27,28 @@ export interface RepoStoreState {
   error: string | null
   /** Paths with a stage/unstage write in flight, so rows can show progress. */
   pendingPaths: ReadonlySet<string>
+  /**
+   * Whether at least one file has been validated since this repository was
+   * opened. Gates the "queue cleared" celebration so a repo opened already fully
+   * staged (an agent's `git add`, a prior session) is not falsely congratulated.
+   */
+  reviewedHere: boolean
   /** Open `path` as the repository and load its status. */
   open: (path: string) => Promise<void>
   /** Prompt for a directory and {@link RepoStoreState.open} it. No-op if cancelled. */
   openViaDialog: () => Promise<void>
   /** Re-read the status of the currently open repository. No-op if none. */
   refresh: () => Promise<void>
-  /** Validate `file`: stage it, refresh, and re-align the diff selection. */
-  stage: (file: string) => Promise<void>
-  /** Un-validate `file`: unstage it, refresh, and re-align the diff selection. */
-  unstage: (file: string) => Promise<void>
+  /**
+   * Validate `file`: stage it, refresh, and re-align the diff selection. Resolves
+   * to whether the validation was applied or is already in flight — `false` only
+   * when there is no open repository or the index write failed, so a caller can
+   * undo an optimistic advance.
+   */
+  stage: (file: string) => Promise<boolean>
+  /** Un-validate `file`: unstage it, refresh, and re-align the diff selection.
+   * Resolves like {@link RepoStoreState.stage}. */
+  unstage: (file: string) => Promise<boolean>
 }
 
 /**
@@ -61,6 +73,7 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
   status: null,
   error: null,
   pendingPaths: new Set(),
+  reviewedHere: false,
 
   open: async (path) => {
     const token = ++openToken
@@ -72,7 +85,7 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
       // selection, diff cache and change counts so nothing leaks across the switch.
       useDiffStore.getState().reset()
       useStatsStore.getState().reset()
-      set({ phase: 'ready', info, status, pendingPaths: new Set() })
+      set({ phase: 'ready', info, status, pendingPaths: new Set(), reviewedHere: false })
     } catch (error) {
       if (token !== openToken) return
       set({ phase: 'error', info: null, status: null, error: toMessage(error) })
@@ -108,8 +121,8 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
     }
   },
 
-  stage: (file) => mutateIndex(get, set, stageFile, file),
-  unstage: (file) => mutateIndex(get, set, unstageFile, file),
+  stage: (file) => mutateIndex(get, set, stageFile, file, true),
+  unstage: (file) => mutateIndex(get, set, unstageFile, file, false),
 }))
 
 /**
@@ -117,23 +130,36 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
  * re-aligns the selection so the panel follows the file across sections. The
  * file is marked pending for the duration so its row can disable/spin and a
  * second click is ignored; a failure surfaces inline without disturbing the repo.
+ * A successful `validated` (stage) write arms {@link RepoStoreState.reviewedHere}
+ * so the completion celebration only fires once work was burned down in-session.
  */
 async function mutateIndex(
   get: () => RepoStoreState,
   set: (partial: Partial<RepoStoreState>) => void,
   write: (root: string, file: string) => Promise<void>,
   file: string,
-): Promise<void> {
+  validated: boolean,
+): Promise<boolean> {
   const { info, pendingPaths } = get()
-  if (!info || pendingPaths.has(file)) {
-    return
+  if (!info) {
+    return false
+  }
+  // A write for this file is already in flight: ignore the duplicate, but report
+  // it as underway so a caller doesn't treat it as a failure.
+  if (pendingPaths.has(file)) {
+    return true
   }
   set({ pendingPaths: new Set(pendingPaths).add(file) })
   try {
     await write(info.root, file)
+    if (validated) {
+      set({ reviewedHere: true })
+    }
     await get().refresh()
+    return true
   } catch (error) {
     set({ error: toMessage(error) })
+    return false
   } finally {
     const next = new Set(get().pendingPaths)
     next.delete(file)

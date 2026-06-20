@@ -32,6 +32,7 @@ export const SidebarFilter = forwardRef<HTMLInputElement, SidebarFilterProps>(
           autoCorrect="off"
           placeholder="Filtrer les fichiers…"
           aria-label="Filtrer les fichiers"
+          title="Filtrer — ↓ pour parcourir la liste, Entrée pour valider"
           onChange={(event) => onChange(event.target.value)}
         />
         {value ? (

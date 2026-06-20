@@ -15,8 +15,12 @@ import { useDiffStore } from '../../stores/use-diff-store'
 export interface RowActions {
   /** Open `path` (in `section`) in the diff panel. */
   readonly select: (section: DiffSection, path: string) => void
-  /** Validate (stage) or un-validate (unstage) `path`, depending on `section`. */
-  readonly act: (section: DiffSection, path: string) => void
+  /**
+   * Validate (stage) or un-validate (unstage) `path`, depending on `section`.
+   * Resolves to whether the write landed (or is already in flight) — `false`
+   * when it failed, so the keyboard model can undo an optimistic advance.
+   */
+  readonly act: (section: DiffSection, path: string) => Promise<boolean>
 }
 
 const RowContext = createContext<RowActions | null>(null)
@@ -34,11 +38,7 @@ export function useRowActions(): RowActions {
 }
 
 /** Whether `path` in `section` is the file currently open in the diff panel. */
-export function isSelected(
-  selected: DiffSelection | null,
-  section: DiffSection,
-  path: string,
-): boolean {
+function isSelected(selected: DiffSelection | null, section: DiffSection, path: string): boolean {
   return selected?.section === section && selected.path === path
 }
 

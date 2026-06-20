@@ -150,7 +150,6 @@ body {
 .app-footer__version {
   font-family: var(--code-font-family);
   font-size: 11px;
-  font-feature-settings: "tnum" 1;
   letter-spacing: 0.01em;
   color: var(--gray-a9);
 }
@@ -1184,6 +1183,21 @@ button.review-section__head:hover .disclosure-chevron {
   color: var(--red-11);
 }
 
+/* Right cluster of the diff header: the line delta and the validate action, so a
+ * file open in the panel can be validated even when it is filtered out of the list. */
+.diff-panel__end {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Unlike the row's `row-act`, the header action is always visible; `margin: 0`
+ * cancels the Radix ghost IconButton's optical negative margins. */
+.diff-panel__validate {
+  margin: 0;
+}
+
 /* The body delegates scrolling to the virtualized .diff-scroll inside it. */
 .diff-panel__body {
   flex: 1 1 auto;
@@ -1240,9 +1254,10 @@ button.review-section__head:hover .disclosure-chevron {
 }
 
 .review-complete__title {
-  font-size: 16px;
+  font-size: 15px;
+  line-height: 20px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.006em;
   color: var(--gray-12);
 }
 
@@ -1302,9 +1317,9 @@ button.review-section__head:hover .disclosure-chevron {
   line-height: var(--diff-row-height, 20px);
   padding: 0 12px;
   color: var(--accent-a11);
+  /* One seam, per the design system: the --gtg-raised value-step alone lifts the
+   * band off the gray-2 diff surface — no hairline on top of the tint. */
   background: var(--gtg-raised);
-  border-top: 1px solid var(--gtg-hairline);
-  border-bottom: 1px solid var(--gtg-hairline);
   white-space: pre;
   user-select: none;
 }

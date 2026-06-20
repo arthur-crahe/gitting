@@ -36,7 +36,7 @@ function Harness({
 }
 
 function makeActions(): RowActions {
-  return { select: vi.fn(), act: vi.fn() }
+  return { select: vi.fn(), act: vi.fn(async () => true) }
 }
 
 /**
@@ -52,7 +52,10 @@ function MutableHarness({ initial }: { initial: { section: DiffSection; path: st
   const actions = useMemo<RowActions>(
     () => ({
       select: () => {},
-      act: (_section, path) => setRows((current) => current.filter((row) => row.path !== path)),
+      act: (_section, path) => {
+        setRows((current) => current.filter((row) => row.path !== path))
+        return Promise.resolve(true)
+      },
     }),
     [],
   )
@@ -177,6 +180,70 @@ describe('useSidebarKeyboard', () => {
   it('keeps a keyboard target (the filter) after the last file is validated', () => {
     render(<MutableHarness initial={[{ section: 'unstaged', path: 'only.ts' }]} />)
     fireEvent.keyDown(screen.getByText('only.ts'), { key: 'Enter' })
+    expect(document.activeElement).toBe(screen.getByLabelText('filter'))
+  })
+
+  it('disarms focus recovery when a validate fails, so a later refresh cannot steal focus', async () => {
+    // The write fails and the row stays put (no section change arrives).
+    function FailHarness() {
+      const rootRef = useRef<HTMLDivElement>(null)
+      const filterRef = useRef<HTMLInputElement>(null)
+      const [tick, setTick] = useState(0)
+      const actions = useMemo<RowActions>(
+        () => ({ select: () => {}, act: () => Promise.resolve(false) }),
+        [],
+      )
+      const { onKeyDown, restoreFocus } = useSidebarKeyboard({
+        rootRef,
+        filterRef,
+        actions,
+        clearFilter: () => false,
+      })
+      // biome-ignore lint/correctness/useExhaustiveDependencies: mirror the sidebar — an unrelated status change re-runs restoreFocus.
+      useLayoutEffect(() => {
+        restoreFocus()
+      }, [tick, restoreFocus])
+      return (
+        // biome-ignore lint/a11y/noStaticElementInteractions: test harness mirroring the sidebar's delegated key handler.
+        <div ref={rootRef} onKeyDown={onKeyDown}>
+          <div className="review-split__list-head">
+            <input ref={filterRef} aria-label="filter" />
+          </div>
+          <button
+            type="button"
+            data-file-row
+            data-section="unstaged"
+            data-path="a.ts"
+            tabIndex={-1}
+          >
+            a.ts
+          </button>
+          <button
+            type="button"
+            data-file-row
+            data-section="unstaged"
+            data-path="b.ts"
+            tabIndex={-1}
+          >
+            b.ts
+          </button>
+          <button type="button" onClick={() => setTick((t) => t + 1)}>
+            refresh
+          </button>
+        </div>
+      )
+    }
+    render(<FailHarness />)
+    const a = screen.getByText('a.ts')
+    a.focus()
+    fireEvent.keyDown(a, { key: 'Enter' })
+    // Let the failed act() settle so the latch is disarmed.
+    await Promise.resolve()
+    await Promise.resolve()
+    // Focus elsewhere, then trigger an unrelated refresh: a stale latch would
+    // yank focus back to the pre-picked sibling here.
+    screen.getByLabelText('filter').focus()
+    fireEvent.click(screen.getByText('refresh'))
     expect(document.activeElement).toBe(screen.getByLabelText('filter'))
   })
 })

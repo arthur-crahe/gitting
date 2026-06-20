@@ -59,12 +59,16 @@ export function StatusSection({
   const isQueue = section === 'unstaged'
   const count = filtering ? `${filtered.length} / ${entries.length}` : `${entries.length}`
 
-  const body =
-    entries.length === 0 ? (
-      empty
-    ) : filtered.length === 0 ? (
-      <span className="review-section__empty">Aucun fichier ne correspond.</span>
-    ) : mode === 'tree' ? (
+  // Built only when the section is open — a collapsed archive must not construct
+  // (and reconcile) all of its row elements on every render.
+  const renderBody = () => {
+    if (entries.length === 0) {
+      return empty
+    }
+    if (filtered.length === 0) {
+      return <span className="review-section__empty">Aucun fichier ne correspond.</span>
+    }
+    return mode === 'tree' ? (
       <FileTree entries={filtered} section={section} forceExpand={filtering} recede={recede} />
     ) : (
       <ul className="review-section__list">
@@ -73,6 +77,7 @@ export function StatusSection({
         ))}
       </ul>
     )
+  }
 
   return (
     <section className="review-section" data-section={section} aria-labelledby={titleId}>
@@ -99,7 +104,7 @@ export function StatusSection({
           {count}
         </span>
       </button>
-      {open ? body : null}
+      {open ? renderBody() : null}
     </section>
   )
 }

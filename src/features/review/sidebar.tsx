@@ -7,10 +7,10 @@ import {
   useRef,
   useState,
 } from 'react'
-import { CheckCircleIcon } from '../../components/icons'
 import { useRepoStore } from '../../stores/use-repo-store'
 import { useStatsStore } from '../../stores/use-stats-store'
 import { useViewStore } from '../../stores/use-view-store'
+import { CompletionBeat } from './completion-beat'
 import { RepoMenu } from './repo-menu'
 import { type ReviewStats, reviewStats } from './review-stats'
 import { useRowActions } from './row-context'
@@ -26,18 +26,7 @@ import { ViewModeToggle } from './view-mode-toggle'
  */
 function QueueEmpty({ stats }: { stats: ReviewStats }) {
   if (stats.complete) {
-    return (
-      <div className="sidebar-complete">
-        <span className="sidebar-complete__mark">
-          <CheckCircleIcon size={22} />
-        </span>
-        <span className="sidebar-complete__title">Tout est relu</span>
-        <span className="sidebar-complete__sub">
-          {stats.reviewed} fichier{stats.reviewed > 1 ? 's' : ''} validé
-          {stats.reviewed > 1 ? 's' : ''}
-        </span>
-      </div>
-    )
+    return <CompletionBeat reviewed={stats.reviewed} prefix="sidebar-complete" iconSize={22} />
   }
   return <span className="review-section__empty">Aucune modification locale.</span>
 }
@@ -64,6 +53,7 @@ export function Sidebar({
 }) {
   const status = useRepoStore((s) => s.status)
   const root = useRepoStore((s) => s.info?.root ?? null)
+  const reviewedHere = useRepoStore((s) => s.reviewedHere)
   const mode = useViewStore((s) => s.mode)
   const loadStats = useStatsStore((s) => s.load)
   const actions = useRowActions()
@@ -121,7 +111,7 @@ export function Sidebar({
     return null
   }
 
-  const stats = reviewStats(status)
+  const stats = reviewStats(status, reviewedHere)
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the key handler delegates list navigation for the focusable rows it contains; rows carry the roles/labels.
