@@ -23,16 +23,3 @@ export function countDiffLines(file: DiffFile): FileStat {
   }
   return { add, del }
 }
-
-/**
- * Indexes a section's diffs by path into per-file {@link FileStat}s — the source
- * for the sidebar's `+N −N` change magnitude. Binary/mode-only files (no hunks)
- * map to `{ add: 0, del: 0 }`.
- */
-export function indexDiffStats(files: readonly DiffFile[]): Record<string, FileStat> {
-  const stats: Record<string, FileStat> = {}
-  for (const file of files) {
-    stats[file.path] = countDiffLines(file)
-  }
-  return stats
-}

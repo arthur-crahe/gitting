@@ -20,6 +20,7 @@ pub fn run() {
             commands::repo_status,
             commands::diff_unstaged,
             commands::diff_staged,
+            commands::diff_stats,
             commands::stage_file,
             commands::unstage_file,
         ])

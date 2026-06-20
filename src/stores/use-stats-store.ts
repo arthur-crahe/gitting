@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { type FileStat, indexDiffStats } from '../lib/diff-stats'
-import { diffStaged, diffUnstaged } from '../lib/git'
+import type { FileStat } from '../lib/diff-stats'
+import { type DiffStatEntry, diffStats } from '../lib/git'
 import type { DiffSection } from './use-diff-store'
 
 /** Per-file `+N −N` change magnitude for each review section. */
@@ -22,9 +22,32 @@ let token = 0
 const EMPTY: Record<DiffSection, Record<string, FileStat>> = { staged: {}, unstaged: {} }
 
 /**
+ * Indexes a section's wire counts by path, **reusing the previous render's
+ * {@link FileStat} object** whenever a path's counts are unchanged. Because
+ * `RowEnd` subscribes to its own `stats[section][path]` by reference, this keeps
+ * every unchanged row's selector stable so only genuinely-changed rows re-render
+ * after a refresh.
+ */
+function indexStats(
+  entries: readonly DiffStatEntry[],
+  prev: Record<string, FileStat>,
+): Record<string, FileStat> {
+  const next: Record<string, FileStat> = {}
+  for (const entry of entries) {
+    const existing = prev[entry.path]
+    next[entry.path] =
+      existing && existing.add === entry.add && existing.del === entry.del
+        ? existing
+        : { add: entry.add, del: entry.del }
+  }
+  return next
+}
+
+/**
  * Store for the sidebar's per-file change magnitude (the `+N −N` GitButler-style
- * signal). The counts are **decorative metadata**, computed from the same gix
- * diffs the panel renders: {@link StatsStoreState.load} reads both sections once
+ * signal). The counts are **decorative metadata**: {@link StatsStoreState.load}
+ * reads both sections' totals in one backend call (summed server-side from the
+ * same gix diffs the panel renders, so only the totals cross the IPC boundary)
  * and indexes them by path; a failure is swallowed (the rows simply show no
  * counts) so it can never disturb the review flow. The sidebar reloads it
  * whenever the status changes, and it is reset across repository switches.
@@ -35,11 +58,16 @@ export const useStatsStore = create<StatsStoreState>((set) => ({
   load: async (root) => {
     const current = ++token
     try {
-      const [unstaged, staged] = await Promise.all([diffUnstaged(root), diffStaged(root)])
+      const { unstaged, staged } = await diffStats(root)
       if (current !== token) {
         return
       }
-      set({ stats: { unstaged: indexDiffStats(unstaged), staged: indexDiffStats(staged) } })
+      set((state) => ({
+        stats: {
+          unstaged: indexStats(unstaged, state.stats.unstaged),
+          staged: indexStats(staged, state.stats.staged),
+        },
+      }))
     } catch {
       // Counts are decorative; never surface a failure here.
     }

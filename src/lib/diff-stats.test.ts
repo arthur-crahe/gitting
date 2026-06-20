@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { countDiffLines, indexDiffStats } from './diff-stats'
+import { countDiffLines } from './diff-stats'
 import type { DiffFile, DiffLine } from './git'
 
 const line = (kind: DiffLine['kind']): DiffLine => ({ kind, oldNo: null, newNo: null, content: '' })
@@ -27,12 +27,5 @@ describe('countDiffLines', () => {
 
   it('returns zeroes for a file with no hunks (binary / mode-only)', () => {
     expect(countDiffLines(file('bin', []))).toEqual({ add: 0, del: 0 })
-  })
-})
-
-describe('indexDiffStats', () => {
-  it('indexes per-file stats by path', () => {
-    const stats = indexDiffStats([file('a.ts', ['add']), file('b.ts', ['delete', 'delete'])])
-    expect(stats).toEqual({ 'a.ts': { add: 1, del: 0 }, 'b.ts': { add: 0, del: 2 } })
   })
 })

@@ -89,6 +89,31 @@ export interface DiffFile {
 }
 
 /**
+ * The `+N −N` line magnitude of one changed file. Mirrors the Rust `FileStat`
+ * (camelCase via serde); kept in lockstep — see `src-tauri/src/git/mod.rs`.
+ */
+export interface DiffStatEntry {
+  /** Repository-relative path. */
+  readonly path: string
+  /** Lines added on the new side. */
+  readonly add: number
+  /** Lines removed from the old side. */
+  readonly del: number
+}
+
+/**
+ * Per-file line magnitudes for both review sections — the lightweight counts the
+ * sidebar shows, summed server-side so only the totals cross the IPC boundary.
+ * Mirrors the Rust `DiffStats`.
+ */
+export interface DiffStats {
+  /** "À reviewer" per-file counts. */
+  readonly unstaged: readonly DiffStatEntry[]
+  /** "Validé" per-file counts. */
+  readonly staged: readonly DiffStatEntry[]
+}
+
+/**
  * Discovers the git repository enclosing `path` and returns its identity.
  *
  * @throws if no repository is found, it is bare (no working tree), or its
@@ -121,6 +146,17 @@ export function diffUnstaged(path: string): Promise<readonly DiffFile[]> {
  */
 export function diffStaged(path: string): Promise<readonly DiffFile[]> {
   return invoke<DiffFile[]>('diff_staged', { path })
+}
+
+/**
+ * Reads the per-file `+N −N` line counts for both review sections of the repo at
+ * `path` — the sidebar's change magnitude, summed from the same hunks the diffs
+ * render so the counts always agree with the rendered diff.
+ *
+ * @throws if the repository cannot be read.
+ */
+export function diffStats(path: string): Promise<DiffStats> {
+  return invoke<DiffStats>('diff_stats', { path })
 }
 
 /**
