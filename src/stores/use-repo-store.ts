@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { toMessage } from '../lib/error'
 import {
   openRepo,
+  pickRepoDirectory,
   type RepoInfo,
   type RepoStatus,
   readStatus,
@@ -9,6 +10,7 @@ import {
   unstageFile,
 } from '../lib/git'
 import { useDiffStore } from './use-diff-store'
+import { useStatsStore } from './use-stats-store'
 
 /** Lifecycle of the opened repository, surfaced to the UI. */
 export type RepoPhase = 'empty' | 'loading' | 'ready' | 'error'
@@ -27,6 +29,8 @@ export interface RepoStoreState {
   pendingPaths: ReadonlySet<string>
   /** Open `path` as the repository and load its status. */
   open: (path: string) => Promise<void>
+  /** Prompt for a directory and {@link RepoStoreState.open} it. No-op if cancelled. */
+  openViaDialog: () => Promise<void>
   /** Re-read the status of the currently open repository. No-op if none. */
   refresh: () => Promise<void>
   /** Validate `file`: stage it, refresh, and re-align the diff selection. */
@@ -65,12 +69,20 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
       const [info, status] = await Promise.all([openRepo(path), readStatus(path)])
       if (token !== openToken) return
       // A different repository is now under review: drop the previous one's
-      // selection and diff cache so nothing leaks across the switch.
+      // selection, diff cache and change counts so nothing leaks across the switch.
       useDiffStore.getState().reset()
+      useStatsStore.getState().reset()
       set({ phase: 'ready', info, status, pendingPaths: new Set() })
     } catch (error) {
       if (token !== openToken) return
       set({ phase: 'error', info: null, status: null, error: toMessage(error) })
+    }
+  },
+
+  openViaDialog: async () => {
+    const path = await pickRepoDirectory()
+    if (path) {
+      await get().open(path)
     }
   },
 

@@ -9,10 +9,12 @@ export type Appearance = 'light' | 'dark'
  * the Radix accent scales. Each value is a valid Radix `<Theme accentColor>` and
  * has a matching `--<color>-*` CSS scale available globally for swatches. This
  * array is the single source of truth; {@link AccentColor} is derived from it.
+ *
+ * Ordered cool-first (blue is the default): a sober, code-tool palette leads, and
+ * the violet/iris pair — the tell-tale "AI default" accent — is demoted to the
+ * tail rather than removed, so the runtime choice stays whole.
  */
 export const ACCENT_COLORS = [
-  'iris',
-  'violet',
   'blue',
   'cyan',
   'teal',
@@ -23,6 +25,8 @@ export const ACCENT_COLORS = [
   'tomato',
   'ruby',
   'pink',
+  'violet',
+  'iris',
 ] as const
 
 /** A selectable accent color — one of {@link ACCENT_COLORS}. */
@@ -46,10 +50,10 @@ function initialAppearance(): Appearance {
   return 'dark'
 }
 
-/** Persisted accent, else the default (`iris`). */
+/** Persisted accent, else the default (`blue`). */
 function initialAccent(): AccentColor {
   const stored = readStorage(ACCENT_KEY)
-  return ACCENT_COLORS.includes(stored as AccentColor) ? (stored as AccentColor) : 'iris'
+  return ACCENT_COLORS.includes(stored as AccentColor) ? (stored as AccentColor) : 'blue'
 }
 
 /** State and actions for the user's theme preferences. */

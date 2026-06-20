@@ -1,24 +1,23 @@
-import { Text } from '@radix-ui/themes'
+import type { CSSProperties } from 'react'
 import type { ChangeKind } from '../../lib/git'
 import { changeKindGlyph } from './change-kind'
 
 /**
- * The single-letter status indicator (A/M/D/R/T/?/!) for a change kind, colored
- * and labelled per {@link changeKindGlyph}. Fixed-width and monospaced (via the
- * `.status-glyph` class) so it forms a clean leading column. Shared by the flat
- * file list and the tree view.
+ * The status indicator for a change kind — a single git-style **letter** (A/M/D/
+ * R/T/U/!) in the kind's desaturated semantic colour ({@link changeKindGlyph}).
+ * Shared by the sidebar rows (trailing cluster) and the diff header. Carries its
+ * French label for assistive tech.
  */
 export function StatusGlyph({ kind }: { kind: ChangeKind }) {
   const glyph = changeKindGlyph(kind)
   return (
-    <Text
-      className="status-glyph"
-      color={glyph.color}
-      weight="bold"
-      size="2"
+    <span
+      className="status-letter"
+      style={{ color: `var(--${glyph.color}-11)` } as CSSProperties}
+      role="img"
       aria-label={glyph.label}
     >
       {glyph.letter}
-    </Text>
+    </span>
   )
 }

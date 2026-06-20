@@ -13,17 +13,17 @@ const KINDS: ChangeKind[] = [
 ]
 
 describe('changeKindGlyph', () => {
-  it('maps every change kind to a single-char letter, a label and a color', () => {
+  it('maps every change kind to a label, color and status letter', () => {
     for (const kind of KINDS) {
       const glyph = changeKindGlyph(kind)
-      expect(glyph.letter).toHaveLength(1)
       expect(glyph.label.length).toBeGreaterThan(0)
       expect(glyph.color).toBeTruthy()
+      expect(glyph.letter).toHaveLength(1)
     }
   })
 
-  it('gives distinct letters and labels per kind', () => {
-    expect(new Set(KINDS.map((k) => changeKindGlyph(k).letter)).size).toBe(KINDS.length)
+  it('gives a distinct label and letter per kind', () => {
     expect(new Set(KINDS.map((k) => changeKindGlyph(k).label)).size).toBe(KINDS.length)
+    expect(new Set(KINDS.map((k) => changeKindGlyph(k).letter)).size).toBe(KINDS.length)
   })
 })

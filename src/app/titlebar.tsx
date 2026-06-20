@@ -21,7 +21,7 @@ export function Titlebar() {
       <div className="titlebar__zone titlebar__zone--left" data-tauri-drag-region>
         <span className="titlebar__brand">
           <span className="titlebar__brand-dot" />
-          Gitting
+          gitting
         </span>
         <span className="titlebar__crumb">
           <span className="titlebar__crumb-sep">/</span>

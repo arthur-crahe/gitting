@@ -20,7 +20,10 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "5.2.9",
+    "@fontsource/commit-mono": "5.2.5",
     "@radix-ui/themes": "^3.3.0",
+    "@react-symbols/icons": "^1.4.1",
     "@shikijs/langs": "^4.2.0",
     "@shikijs/themes": "^4.2.0",
     "@tanstack/react-virtual": "^3.14.3",

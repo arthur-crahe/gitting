@@ -11,14 +11,18 @@ import toml from '@shikijs/langs/toml'
 import tsx from '@shikijs/langs/tsx'
 import typescript from '@shikijs/langs/typescript'
 import yaml from '@shikijs/langs/yaml'
-import githubDark from '@shikijs/themes/github-dark'
+import githubDarkDimmed from '@shikijs/themes/github-dark-dimmed'
 import githubLight from '@shikijs/themes/github-light'
 import { createHighlighterCore, type HighlighterCore } from 'shiki/core'
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 
-/** Shiki theme ids the diff tokens carry colors for (mapped to light/dark CSS). */
+/**
+ * Shiki theme ids the diff tokens carry colors for (mapped to light/dark CSS).
+ * Dark uses GitHub's *dimmed* palette: its desaturated keyword/structure tokens
+ * let the green/red diff tints stay dominant and never clash with the wash.
+ */
 export const LIGHT_THEME = 'github-light'
-export const DARK_THEME = 'github-dark'
+export const DARK_THEME = 'github-dark-dimmed'
 
 /**
  * The bundled grammars. A curated set covering the languages this app reviews,
@@ -52,7 +56,7 @@ let instance: Promise<HighlighterCore> | null = null
 export function getHighlighter(): Promise<HighlighterCore> {
   if (!instance) {
     instance = createHighlighterCore({
-      themes: [githubLight, githubDark],
+      themes: [githubLight, githubDarkDimmed],
       langs: LANGS,
       engine: createJavaScriptRegexEngine(),
     })

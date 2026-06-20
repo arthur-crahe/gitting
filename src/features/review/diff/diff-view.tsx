@@ -1,6 +1,6 @@
-import { Text } from '@radix-ui/themes'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { type CSSProperties, useMemo, useRef } from 'react'
+import { DocumentIcon } from '../../../components/icons'
 import type { DiffFile } from '../../../lib/git'
 import { DiffLineRow } from './diff-line'
 import { flattenHunks } from './flatten-hunks'
@@ -21,6 +21,12 @@ function emptyReason(file: DiffFile): string {
   }
   if (file.changeKind === 'renamed') {
     return 'Fichier renommé.'
+  }
+  if (file.changeKind === 'typeChange') {
+    return 'Type modifié — pas d’aperçu ligne à ligne.'
+  }
+  if (file.changeKind === 'untracked') {
+    return 'Élément non suivi (dossier, lien ou entrée non régulière) — pas d’aperçu ligne à ligne.'
   }
   if (file.oldMode === '160000' || file.newMode === '160000') {
     return 'Sous-module — pas d’aperçu ligne à ligne.'
@@ -78,9 +84,12 @@ export function DiffView({ file }: { file: DiffFile }) {
 
   if (file.isBinary || file.hunks.length === 0) {
     return (
-      <Text size="2" color="gray" className="diff-empty">
-        {emptyReason(file)}
-      </Text>
+      <div className="diff-notice">
+        <span className="diff-notice__icon">
+          <DocumentIcon />
+        </span>
+        <span className="diff-notice__text">{emptyReason(file)}</span>
+      </div>
     )
   }
 

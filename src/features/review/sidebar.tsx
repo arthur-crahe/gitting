@@ -1,0 +1,169 @@
+import {
+  type CSSProperties,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
+import { CheckCircleIcon } from '../../components/icons'
+import { useRepoStore } from '../../stores/use-repo-store'
+import { useStatsStore } from '../../stores/use-stats-store'
+import { useViewStore } from '../../stores/use-view-store'
+import { RepoMenu } from './repo-menu'
+import { type ReviewStats, reviewStats } from './review-stats'
+import { useRowActions } from './row-context'
+import { SidebarFilter } from './sidebar-filter'
+import { StatusSection } from './status-section'
+import { useSidebarKeyboard } from './use-sidebar-keyboard'
+import { ViewModeToggle } from './view-mode-toggle'
+
+/**
+ * The "À reviewer" empty body: the earned completion beat when work has been
+ * validated and nothing is left to review, else a calm clean-tree line. Kept
+ * distinct so the reward never reads as "nothing changed".
+ */
+function QueueEmpty({ stats }: { stats: ReviewStats }) {
+  if (stats.complete) {
+    return (
+      <div className="sidebar-complete">
+        <span className="sidebar-complete__mark">
+          <CheckCircleIcon size={22} />
+        </span>
+        <span className="sidebar-complete__title">Tout est relu</span>
+        <span className="sidebar-complete__sub">
+          {stats.reviewed} fichier{stats.reviewed > 1 ? 's' : ''} validé
+          {stats.reviewed > 1 ? 's' : ''}
+        </span>
+      </div>
+    )
+  }
+  return <span className="review-section__empty">Aucune modification locale.</span>
+}
+
+/**
+ * The review file list — the redesigned left pane. A header (instant filter +
+ * list/tree toggle + repo menu) over a scroll area holding the two sections:
+ * "À reviewer" (the active queue, on top, open by default, accent count badge)
+ * and "Validé" (the archive, below, collapsed by default, recessed) — both
+ * collapsible. Owns the filter and collapse state, and wires the keyboard model
+ * (arrow navigation + Enter-to-validate-and-advance), restoring focus to the
+ * pre-computed next row after each stage/unstage re-render.
+ *
+ * @param sidebarRef the pane element (also `#review-sidebar`, driven by
+ *   `--sidebar-width` and referenced by the resize handle's `aria-controls`).
+ * @param width the current sidebar width in px (from the sidebar store).
+ */
+export function Sidebar({
+  sidebarRef,
+  width,
+}: {
+  sidebarRef: RefObject<HTMLDivElement | null>
+  width: number
+}) {
+  const status = useRepoStore((s) => s.status)
+  const root = useRepoStore((s) => s.info?.root ?? null)
+  const mode = useViewStore((s) => s.mode)
+  const loadStats = useStatsStore((s) => s.load)
+  const actions = useRowActions()
+
+  const [query, setQuery] = useState('')
+  const [queueOpen, setQueueOpen] = useState(true)
+  const [validatedOpen, setValidatedOpen] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const filterRef = useRef<HTMLInputElement>(null)
+
+  // The filter clears via Esc from inside the keyboard model; read the live
+  // query through a ref so the callback can stay stable.
+  const queryRef = useRef(query)
+  queryRef.current = query
+  const clearFilter = useCallback(() => {
+    if (queryRef.current) {
+      setQuery('')
+      return true
+    }
+    return false
+  }, [])
+
+  const { onKeyDown, restoreFocus } = useSidebarKeyboard({
+    rootRef: sidebarRef,
+    filterRef,
+    actions,
+    clearFilter,
+  })
+
+  // A new repository starts fresh: no filter, queue open, archive collapsed.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: root is the reset trigger — clear transient UI on a repo switch, not on every status change.
+  useEffect(() => {
+    setQuery('')
+    setQueueOpen(true)
+    setValidatedOpen(false)
+  }, [root])
+
+  // After a stage/unstage re-render, land focus on the row the keyboard model
+  // pre-picked (the originally focused row has by then moved sections).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run on each status change to catch the post-mutation render; restoreFocus no-ops when nothing is pending.
+  useLayoutEffect(() => {
+    restoreFocus()
+  }, [status, restoreFocus])
+
+  // Per-file change counts (the +N −N magnitude) track the status: reload on a
+  // working-tree change or a repository switch.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: status is the reload trigger; the load reads the current root.
+  useEffect(() => {
+    if (root) {
+      void loadStats(root)
+    }
+  }, [root, status, loadStats])
+
+  if (!status) {
+    return null
+  }
+
+  const stats = reviewStats(status)
+
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the key handler delegates list navigation for the focusable rows it contains; rows carry the roles/labels.
+    <div
+      className="review-split__list"
+      id="review-sidebar"
+      ref={sidebarRef}
+      style={{ '--sidebar-width': `${width}px` } as CSSProperties}
+      onKeyDown={onKeyDown}
+    >
+      <div className="review-split__list-head">
+        <SidebarFilter ref={filterRef} value={query} onChange={setQuery} />
+        <div className="review-split__head-actions">
+          <ViewModeToggle />
+          <RepoMenu />
+        </div>
+      </div>
+      <div className="review-split__scroll" ref={scrollRef}>
+        <StatusSection
+          title="À reviewer"
+          section="unstaged"
+          entries={status.unstaged}
+          query={query}
+          mode={mode}
+          open={queueOpen}
+          onToggle={() => setQueueOpen((prev) => !prev)}
+          scrollRef={scrollRef}
+          empty={<QueueEmpty stats={stats} />}
+        />
+        <StatusSection
+          title="Validé"
+          section="staged"
+          entries={status.staged}
+          query={query}
+          mode={mode}
+          open={validatedOpen}
+          onToggle={() => setValidatedOpen((prev) => !prev)}
+          recede
+          scrollRef={scrollRef}
+          empty={<span className="review-section__empty">Rien de validé pour l'instant.</span>}
+        />
+      </div>
+    </div>
+  )
+}

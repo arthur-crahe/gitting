@@ -1,15 +1,73 @@
 /*
- * Global styles for the desktop shell.
+ * Gitting — global styles for the desktop shell.
  *
- * The app is the window: a custom frameless titlebar (decorations: false) plus
- * the content area fill the surface edge to edge. Loaded after Radix Themes'
- * stylesheet so these resets win and so the Radix CSS variables (--gray-*,
- * --accent-*, --color-background, --radius-*) are available below.
+ * Design language: see docs/reference/design-system.md. The thesis is "the diff is
+ * the only thing that glows": chrome (titlebar, sidebar, footer) sits on the canvas
+ * tint and recedes; the diff pane is one value-step brighter. Elevation is a tint
+ * step + a 1px alpha hairline — never a shadow on docked surfaces. Colour is a
+ * scalpel: one runtime accent for focus/selection/primary action, desaturated
+ * green/red strictly for diff semantics.
+ *
+ * Loaded after Radix Themes' stylesheet so these rules win and so the Radix CSS
+ * variables (--gray-*, --accent-*, --color-*, --radius-*, --space-*) are available.
  */
 
-:root {
-  --titlebar-height: 38px;
+/* ── Token layer ──────────────────────────────────────────────────────────────
+ * Semantic tokens layered on top of Radix. We never hand-roll a --gray-1..12 ramp
+ * (Radix slate is already OKLCH-grade); we only *assign* its steps to roles, and
+ * flip a couple of assignments between appearances so the diff always reads
+ * brightest. :where() keeps these at the same specificity as Radix's own appearance
+ * scoping, so source order decides — the light override below must follow.
+ */
+.radix-themes {
+  /* Typography */
+  --font-sans: "Geist Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --default-font-family: var(--font-sans);
+  --heading-font-family: var(--font-sans);
+  --code-font-family: "Commit Mono", ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+  --default-font-feature-settings: "tnum" 1, "calt" 1;
+  /* Apply the default app-wide (Radix Themes does not read this var itself). */
+  font-feature-settings: var(--default-font-feature-settings);
+
+  /* Surfaces — DARK (default). Chrome on canvas (gray-1), diff on gray-2. */
+  --gtg-canvas: var(--gray-1);
+  --gtg-sidebar: var(--gray-1);
+  --gtg-surface: var(--gray-2);
+  --gtg-raised: var(--gray-3);
+  --gtg-overlay: var(--color-panel-solid);
+
+  /* Seams — always the alpha gray, so they composite over either appearance. */
+  --gtg-hairline: var(--gray-a4);
+  --gtg-hairline-strong: var(--gray-a6);
+  --gtg-divider: var(--gray-a3);
+
+  /* The single shadow token — overlays only, never docked chrome. */
+  --gtg-shadow-overlay:
+    0 0 0 1px var(--gtg-hairline-strong), 0 1px 2px rgba(0, 0, 0, 0.16),
+    0 8px 24px rgba(0, 0, 0, 0.28);
+
+  /* Motion — nothing exceeds 200ms but the one completion beat. */
+  --dur-hover: 90ms;
+  --dur-selection: 120ms;
+  --dur-disclosure: 160ms;
+  --dur-enter: 200ms;
+  --dur-celebrate: 420ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+
+  --titlebar-height: 32px;
+  --footer-height: 24px;
 }
+
+/* Surfaces — LIGHT. The diff becomes the whitest tier (gray-1); chrome recedes to
+ * a faint gray (gray-2). Hairlines and accent posture are unchanged. */
+.radix-themes:where(.light, .light-theme) {
+  --gtg-canvas: var(--gray-2);
+  --gtg-sidebar: var(--gray-2);
+  --gtg-surface: var(--gray-1);
+  --gtg-raised: var(--gray-3);
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────────────*/
 
 html,
 body,
@@ -21,17 +79,48 @@ body,
 body {
   /* Content regions manage their own scrolling; the window itself never scrolls. */
   overflow: hidden;
-  background-color: var(--color-background);
+  background-color: var(--gtg-canvas);
 }
 
 /* Make the Radix Theme wrapper fill the window so the app owns every pixel. */
 #root > .radix-themes {
   height: 100%;
+  background-color: var(--gtg-canvas);
   /* Suppress rubber-band overscroll — this is an app surface, not a web page. */
   overscroll-behavior: none;
 }
 
-/* ── App shell layout ─────────────────────────────────────────────────────── */
+/* Discreet, app-like scrollbars wherever a region scrolls. */
+.app-content,
+.review-split__scroll,
+.diff-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-a5) transparent;
+}
+
+.app-content::-webkit-scrollbar,
+.review-split__scroll::-webkit-scrollbar,
+.diff-scroll::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+.app-content::-webkit-scrollbar-thumb,
+.review-split__scroll::-webkit-scrollbar-thumb,
+.diff-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--gray-a4);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 8px;
+}
+
+.app-content::-webkit-scrollbar-thumb:hover,
+.review-split__scroll::-webkit-scrollbar-thumb:hover,
+.diff-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--gray-a7);
+}
+
+/* ── App shell layout ─────────────────────────────────────────────────────────*/
 
 .app-shell {
   display: flex;
@@ -43,45 +132,73 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  /* Discreet, app-like scrollbars in the scrolling content region. */
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-a6) transparent;
 }
 
-/* Slim footer carrying the running version; fused to the surface like the bar. */
+/* Slim footer fused to the canvas: review progress on the left, version on the right. */
 .app-footer {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  height: 28px;
-  padding-inline: 16px;
-  border-top: 1px solid var(--gray-a4);
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--footer-height);
+  padding-inline: 12px;
+  background: var(--gtg-canvas);
+  border-top: 1px solid var(--gtg-hairline);
 }
 
-.app-content::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+.app-footer__version {
+  font-family: var(--code-font-family);
+  font-size: 11px;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: 0.01em;
+  color: var(--gray-a9);
 }
 
-.app-content::-webkit-scrollbar-thumb {
-  background-color: var(--gray-a5);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  border-radius: 8px;
+/* ── Review progress (footer) — the burn-down at a glance ──────────────────────*/
+
+.review-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
-.app-content::-webkit-scrollbar-thumb:hover {
-  background-color: var(--gray-a7);
+.review-progress__bar {
+  position: relative;
+  width: 72px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--gray-a4);
+  overflow: hidden;
 }
 
-/* ── Custom titlebar — seamless VSCode-style action bar ───────────────────── */
+.review-progress__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent-a8);
+  transition: width var(--dur-enter) var(--ease-out);
+}
 
-/*
- * Three zones: a left identity/breadcrumb cluster (also a drag handle), a
- * flexible centre that is pure drag surface, and a right cluster of app actions
- * followed by the window controls. No border and no distinct background, so the
- * bar fuses into the content below as one continuous surface.
+/* The bar reads "done" in the accent's solid step the moment the queue empties. */
+.review-progress[data-complete="true"] .review-progress__fill {
+  background: var(--accent-9);
+}
+
+.review-progress__label {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.006em;
+  color: var(--gray-a10);
+  white-space: nowrap;
+}
+
+/* ── Custom titlebar — seamless action bar fused to the canvas ─────────────────
+ * Three zones: a left identity/breadcrumb cluster (also a drag handle), a flexible
+ * centre that is pure drag surface, and a right cluster of actions then window
+ * controls. No border, no distinct background — the bar is the canvas.
  */
 .titlebar {
   flex: 0 0 auto;
@@ -89,6 +206,7 @@ body {
   align-items: stretch;
   height: var(--titlebar-height);
   padding-inline: 10px 6px;
+  background: var(--gtg-canvas);
   cursor: default;
   user-select: none;
   -webkit-user-select: none;
@@ -102,7 +220,7 @@ body {
 .titlebar__zone--left {
   flex: 0 1 auto;
   min-width: 0;
-  gap: 7px;
+  gap: 8px;
 }
 
 /* The left zone doubles as a drag handle; its text never steals the target. */
@@ -115,11 +233,8 @@ body {
   gap: 6px;
 }
 
-/*
- * Ghost icon buttons carry negative margins (for optical alignment in text);
- * in this tight action row that makes neighbours overlap. Neutralize it here so
- * the flex `gap` alone controls spacing.
- */
+/* Ghost icon buttons carry optical negative margins; neutralize them in this tight
+ * action row so the flex `gap` alone controls spacing. */
 .titlebar__zone--right :where(.rt-IconButton) {
   margin: 0;
 }
@@ -131,20 +246,24 @@ body {
   min-width: 24px;
 }
 
+/* The wordmark is the identity anchor: lowercase monospace, because the content
+ * is code and the tool should look like it knows that. */
 .titlebar__brand {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: var(--font-size-1);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-family: var(--code-font-family);
+  font-size: 13px;
+  font-weight: 500;
+  font-feature-settings: "liga" 0;
+  letter-spacing: 0;
   color: var(--gray-12);
   white-space: nowrap;
 }
 
 .titlebar__brand-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--accent-9);
 }
@@ -154,7 +273,8 @@ body {
   align-items: center;
   gap: 7px;
   min-width: 0;
-  font-size: var(--font-size-1);
+  font-size: 11px;
+  letter-spacing: 0.006em;
   color: var(--gray-a10);
   white-space: nowrap;
   overflow: hidden;
@@ -172,14 +292,14 @@ body {
   margin-left: 4px;
 }
 
-/* ── Window control buttons ───────────────────────────────────────────────── */
+/* ── Window control buttons ────────────────────────────────────────────────────*/
 
 .winctl {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 26px;
+  width: 30px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: var(--radius-2);
@@ -187,8 +307,8 @@ body {
   color: var(--gray-a11);
   cursor: default;
   transition:
-    background-color 90ms ease,
-    color 90ms ease;
+    background-color var(--dur-hover) ease,
+    color var(--dur-hover) ease;
 }
 
 .winctl:hover {
@@ -215,7 +335,7 @@ body {
   height: 12px;
 }
 
-/* ── Resize grips (frameless windows lose the native resize border) ───────── */
+/* ── Resize grips (frameless windows lose the native resize border) ────────────*/
 
 .win-resizers {
   position: fixed;
@@ -293,13 +413,12 @@ body {
   cursor: nwse-resize;
 }
 
-/* ── Accent picker (titlebar) ─────────────────────────────────────────────── */
+/* ── Accent picker (titlebar) ──────────────────────────────────────────────────*/
 
-/* The trigger swatch reflecting the current accent. */
 .accent-trigger {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   box-shadow: inset 0 0 0 1px var(--gray-a6);
 }
@@ -319,8 +438,8 @@ body {
   cursor: pointer;
   box-shadow: inset 0 0 0 1px var(--gray-a7);
   transition:
-    transform 90ms ease,
-    box-shadow 90ms ease;
+    transform var(--dur-hover) var(--ease-out),
+    box-shadow var(--dur-hover) ease;
 }
 
 .accent-swatch:hover {
@@ -330,303 +449,206 @@ body {
 /* The active accent gets a ring punched out from the panel background. */
 .accent-swatch[data-selected="true"] {
   box-shadow:
-    0 0 0 2px var(--color-panel-solid),
+    0 0 0 2px var(--gtg-overlay),
     0 0 0 4px var(--gray-12);
 }
 
-/* ── Welcome screen ───────────────────────────────────────────────────────── */
+/* ── Welcome screen — the one centred moment, stripped of marketing feel ───────*/
 
 .welcome {
-  padding-top: 11vh;
+  padding-top: 13vh;
 }
 
-/* Rounded, accent-tinted brand mark above the title. */
+/* Monochrome brand glyph (the +/- diff mark) — no accent square, no card. */
 .welcome__mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 60px;
-  height: 60px;
-  margin-bottom: 4px;
-  border-radius: var(--radius-4);
-  background: var(--accent-a3);
-  color: var(--accent-11);
+  width: 44px;
+  height: 44px;
+  margin-bottom: 6px;
+  color: var(--gray-12);
+}
+
+.welcome__wordmark {
+  font-family: var(--code-font-family);
+  font-size: 21px;
+  font-weight: 500;
+  font-feature-settings: "liga" 0;
+  letter-spacing: -0.01em;
+  color: var(--gray-12);
 }
 
 .welcome__error {
   max-width: 440px;
 }
 
-/* ── Review sections ──────────────────────────────────────────────────────── */
-
-/* The whole header is a disclosure button toggling the section. */
-.review-section__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  padding: 2px 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.review-section__title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-/* Disclosure chevron shared by the section heads and the tree folders. */
-.disclosure-chevron {
-  flex: 0 0 auto;
-  color: var(--gray-a10);
-  transition:
-    transform 130ms ease,
-    color 130ms ease;
-}
-
-.disclosure-chevron[data-open="false"] {
-  transform: rotate(-90deg);
-}
-
-.review-section__head:hover .disclosure-chevron {
-  color: var(--gray-12);
-}
-
-.review-section__count {
-  font-variant-numeric: tabular-nums;
-}
-
-.review-section__divider {
-  height: 1px;
-  margin: 10px 0 4px;
-  background: var(--gray-a5);
-}
-
-.review-section__empty {
-  display: block;
-  padding: 6px 8px;
-}
-
-/* Negative inline margin so row hover backgrounds extend past the text column. */
-.review-section__list {
-  margin-inline: -8px;
-}
-
-/* ── File rows ────────────────────────────────────────────────────────────── */
-
-.file-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 5px 8px;
-  border-radius: var(--radius-2);
-  cursor: default;
-}
-
-.file-row:hover {
-  background: var(--gray-a3);
-}
-
-/* Fixed-width, tabular status letter so paths align in a clean column. */
-.status-glyph {
-  flex: 0 0 auto;
-  width: 16px;
-  text-align: center;
-  font-family: var(--code-font-family, ui-monospace, monospace);
-  font-variant-numeric: tabular-nums;
-}
-
-/* A flex row so the directory truncates while the file name stays fully
- * visible — the meaningful part of the path never disappears. */
-.file-row__path {
-  display: flex;
-  min-width: 0;
-  font-family: var(--code-font-family, ui-monospace, monospace);
-  font-size: var(--font-size-2);
-}
-
-.file-row__dir {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--gray-a10);
-}
-
-.file-row__name {
-  flex: 0 0 auto;
-  white-space: nowrap;
-  color: var(--gray-12);
-}
-
-/* ── File tree ────────────────────────────────────────────────────────────── */
-
-/* Negative inline margin so row hover backgrounds extend past the text column,
- * matching .review-section__list. */
-.tree {
-  margin-inline: -8px;
-}
-
-/* Folders and files share a row shape; the left padding is set inline per depth
- * (8px base + 16px per level), so it is intentionally absent here. */
-.tree-folder,
-.tree-file {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding-block: 5px;
-  padding-right: 8px;
-  border-radius: var(--radius-2);
-}
-
-.tree-folder {
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.tree-folder:hover,
-.tree-file:hover {
-  background: var(--gray-a3);
-}
-
-.tree-folder:hover .disclosure-chevron {
-  color: var(--gray-12);
-}
-
-.tree-file {
-  cursor: default;
-}
-
-/* Names truncate and use the monospace path treatment, matching the flat list
- * (where the whole path, directory prefix included, is monospaced). */
-.tree-folder__name,
-.tree-file__name {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-family: var(--code-font-family, ui-monospace, monospace);
-  font-size: var(--font-size-2);
-  color: var(--gray-12);
-}
-
-/* Layout toggle: icon + label inside each segment. */
-.view-toggle__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* ── Master-detail review surface ─────────────────────────────────────────── */
+/* ── Review surface — edge-to-edge inverted-L, no card frame ───────────────────*/
 
 /* In review mode the content area is a fixed-height frame; its panes scroll. */
 .app-content--review {
   overflow: hidden;
-}
-
-.review-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  height: 100%;
-  padding: 14px 18px;
+  background: var(--gtg-canvas);
 }
 
 .review {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
-  gap: 12px;
 }
 
-.review__toolbar {
+/* Transient banners (update notice, refresh error) sit above the split with their
+ * own breathing room; collapsed to nothing when empty so the split stays flush. */
+.review__banner {
   flex: 0 0 auto;
+  padding: 10px 12px 0;
 }
 
-/* The split: a scrollable file-list pane and a diff pane sharing the height. */
+.review__banner:empty {
+  display: none;
+}
+
+/* The split: a file-list pane and the diff pane sharing the height, fused to the
+ * window edges. The sole seam is the resize handle. */
 .review-split {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
-  border: 1px solid var(--gray-a4);
-  border-radius: var(--radius-3);
   overflow: hidden;
 }
 
 /*
- * The list pane is a column: a pinned header over an independent scroller. Its
- * width is driven by the --sidebar-width custom property (set inline from the
- * store, mutated directly during a drag — see ADR 0003); the JS clamp is the
- * single source of truth, so no min/max-width is duplicated here. The handle,
- * not a border, is the visual boundary with the diff.
+ * The list pane recedes on the canvas tint. Its width is driven by --sidebar-width
+ * (set inline from the store, mutated directly during a drag — ADR 0003); the JS
+ * clamp is the single source of truth, so no min/max-width is duplicated here.
  */
 .review-split__list {
   display: flex;
   flex-direction: column;
   flex: 0 0 var(--sidebar-width, 320px);
+  background: var(--gtg-sidebar);
 }
 
 .review-split__list-head {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--gray-a4);
+  height: 40px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--gtg-hairline);
 }
 
-.review-split__count {
+.review-split__head-actions {
   flex: 0 0 auto;
-  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Instant file filter — a borderless field that fills the header. */
+.sidebar-filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sidebar-filter__icon {
+  position: absolute;
+  left: 8px;
+  display: inline-flex;
+  color: var(--gray-a9);
+  pointer-events: none;
+}
+
+.sidebar-filter__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 26px 0 28px;
+  border: 0;
+  border-radius: var(--radius-3);
+  background: var(--gray-a2);
+  color: var(--gray-12);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  caret-color: var(--accent-9);
+  transition: background-color var(--dur-hover) ease;
+}
+
+.sidebar-filter__input::placeholder {
+  color: var(--gray-9);
+}
+
+.sidebar-filter__input:focus {
+  outline: none;
+  background: var(--gray-a3);
+}
+
+.sidebar-filter__clear {
+  position: absolute;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-2);
+  background: none;
+  color: var(--gray-a9);
+  cursor: default;
+  transition:
+    color var(--dur-hover) ease,
+    background-color var(--dur-hover) ease;
+}
+
+.sidebar-filter__clear:hover {
+  color: var(--gray-12);
+  background: var(--gray-a3);
 }
 
 .review-split__scroll {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
-  padding: 8px 12px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-a6) transparent;
+  /* The file list never scrolls sideways — names truncate; only vertical. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 6px 16px;
 }
 
+/* The diff pane is the brightest docked tier — the only thing that "glows". */
 .review-split__diff {
   display: flex;
   flex: 1 1 auto;
-  /* The flex floor the diff (and its future virtualizer) needs to shrink. */
+  /* The flex floor the diff (and its virtualizer) needs to shrink. */
   min-width: 0;
+  background: var(--gtg-surface);
   /* Isolate the diff's relayout from the neighbouring sidebar resize. */
   contain: layout;
 }
 
 /* The draggable separator: the sole visual boundary between list and diff. */
 .review-split__handle {
-  flex: 0 0 6px;
+  flex: 0 0 1px;
   align-self: stretch;
-  /* Enlarged hit area beyond the 6px line (WebKitGTK 1px hit-testing is poor). */
-  margin-inline: -2px;
-  padding-inline: 2px;
+  /* Enlarged hit area beyond the 1px line (WebKitGTK 1px hit-testing is poor). */
+  margin-inline: -3px;
+  padding-inline: 3px;
+  z-index: 2;
   background-clip: content-box;
-  background-color: var(--gray-a4);
+  background-color: var(--gtg-hairline);
   cursor: col-resize;
   /* Keep gestures and text selection out of the drag. */
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  transition: background-color 90ms ease;
+  transition: background-color var(--dur-hover) ease;
 }
 
 .review-split__handle:hover,
@@ -652,16 +674,171 @@ body {
   pointer-events: none;
 }
 
+/* ── Review sections ───────────────────────────────────────────────────────────*/
+
+.review-section {
+  position: relative;
+}
+
+.review-section + .review-section {
+  margin-top: 2px;
+}
+
+/* A zero-height probe just above each sticky head; an IntersectionObserver flips
+ * data-stuck on the head once the probe scrolls out of the viewport. */
+.review-section__sentinel {
+  position: absolute;
+  top: 0;
+  width: 100%;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Section head — sticks to the top of the scroll. It shares the sidebar tint, so
+ * a hairline seam appears only once stuck (otherwise it is invisible over
+ * scrolling content). Never a shadow on a docked surface. */
+.review-section__head {
+  /* border-box so width:100% + padding doesn't overflow (Radix only sets
+   * border-box on its own components, not our custom elements). */
+  box-sizing: border-box;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border: 0;
+  background: var(--gtg-sidebar);
+  color: inherit;
+  text-align: left;
+}
+
+button.review-section__head {
+  cursor: pointer;
+}
+
+.review-section__head[data-stuck="true"] {
+  box-shadow: inset 0 -1px 0 var(--gtg-hairline);
+}
+
+.review-section__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Normal-case, never ALL-CAPS. The active queue reads at full strength; the
+ * "Validé" archive title recedes a step. */
+.review-section__title-text {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--gray-12);
+}
+
+.review-section[data-section="staged"] .review-section__title-text {
+  color: var(--gray-11);
+}
+
+/* Disclosure chevron shared by the "Validé" head and the tree folders. */
+.disclosure-chevron {
+  flex: 0 0 auto;
+  color: var(--gray-a9);
+  transition:
+    transform var(--dur-disclosure) var(--ease-out),
+    color var(--dur-hover) ease;
+}
+
+.disclosure-chevron[data-open="false"] {
+  transform: rotate(-90deg);
+}
+
+button.review-section__head:hover .disclosure-chevron {
+  color: var(--gray-11);
+}
+
+.review-section__count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.006em;
+  color: var(--gray-a10);
+}
+
+/* The active-queue count is the burn-down number — a quiet accent badge. */
+.review-section__count--queue {
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: var(--radius-4);
+  text-align: center;
+  color: var(--accent-11);
+  background: var(--accent-a3);
+}
+
+.review-section__count--queue[data-empty="true"] {
+  color: var(--gray-a10);
+  background: var(--gray-a3);
+}
+
+.review-section__empty {
+  display: block;
+  padding: 6px 10px 10px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--gray-a10);
+}
+
+/* ── File rows (flat list + tree leaf) ─────────────────────────────────────────*/
+
+.review-section__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 2px 0 0;
+  list-style: none;
+}
+
+.file-row,
+.tree-file {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 1px 8px 1px 10px;
+  border-radius: var(--radius-2);
+  cursor: default;
+  transition: background-color var(--dur-selection) var(--ease-out);
+}
+
+.file-row:hover,
+.tree-file:hover {
+  background: var(--gray-a3);
+}
+
+.file-row[data-selected="true"],
+.tree-file[data-selected="true"] {
+  background: var(--accent-a3);
+}
+
 /* The select target fills the row so the trailing action sits flush right. */
 .file-row__select,
 .tree-file__select {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
   padding: 0;
   border: 0;
+  border-radius: var(--radius-2);
   background: none;
   color: inherit;
   font: inherit;
@@ -669,10 +846,224 @@ body {
   cursor: default;
 }
 
-/* Trailing validate/unvalidate action: hidden until row hover or selection. */
-.row-act {
+/* Stretch the click target over the whole row (incl. padding / empty space), so
+ * a click anywhere but the trailing action opens the file. */
+.file-row__select::after,
+.tree-file__select::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* Keyboard focus only — a mouse selection shows the fill, not the ring. */
+.file-row__select:focus-visible,
+.tree-file__select:focus-visible,
+.tree-folder:focus-visible {
+  outline: 2px solid var(--accent-8);
+  outline-offset: -2px;
+}
+
+/* Names are the UI sans — crisp and scannable; mono is reserved for the diff. A
+ * baseline flex row so the directory truncates from the LEFT (keeping the
+ * immediate parent) while the file name stays fully visible. */
+.file-row__path {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.file-row__dir {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  /* Truncate from the left so "…features/review" keeps the useful tail. */
+  direction: rtl;
+  text-align: left;
+  color: var(--gray-a10);
+}
+
+.file-row__sep {
   flex: 0 0 auto;
+  margin: 0 1px;
+  color: var(--gray-a7);
+}
+
+/* Flat list and tree leaf share one name treatment, so they stay identical. The
+ * directory (`flex: 0 1 auto`) gives way first under pressure; the name ellipses
+ * only once the directory is gone, so it never overruns the trailing action. */
+.file-row__name,
+.tree-file__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  letter-spacing: -0.003em;
+  color: var(--gray-12);
+}
+
+/* The "Validé" archive recedes: the done work's basename steps back, while the
+ * status glyph keeps its semantic colour. */
+.file-row[data-recede="true"] .file-row__name,
+.tree-file[data-recede="true"] .tree-file__name {
+  font-weight: 400;
+  color: var(--gray-11);
+}
+
+/* On a selected row the directory lifts so it stays legible over the fill. */
+.file-row[data-selected="true"] .file-row__dir {
+  color: var(--gray-a11);
+}
+
+/* ── File-type icon (left) + git status letter (right) ─────────────────────────*/
+
+/* Colored VSCode-style file/folder icons (react-symbols); fixed 16px column. */
+.file-type-icon {
+  flex: 0 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.file-type-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+/* Git status as a single letter (A/M/D/R/T/U/!), in the kind's semantic colour. */
+.status-letter {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 11px;
+  font-family: var(--code-font-family);
+  font-size: 11px;
+  font-weight: 600;
+  font-feature-settings: "liga" 0;
+  line-height: 1;
+}
+
+/* ── File tree ─────────────────────────────────────────────────────────────────*/
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  padding-top: 2px;
+}
+
+/* Folders share the file-row shape; the left padding is set inline per depth.
+ * The .tree-file row shape, states and name come from the file-row rules above,
+ * so the flat list and the tree leaves stay pixel-identical. */
+.tree-folder {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 22px;
+  padding-block: 1px;
+  padding-right: 8px;
+  border: 0;
+  border-radius: var(--radius-2);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-selection) var(--ease-out);
+}
+
+.tree-folder:hover {
+  background: var(--gray-a3);
+}
+
+.tree-folder:hover .disclosure-chevron {
+  color: var(--gray-11);
+}
+
+.tree-folder__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: -0.003em;
+  color: var(--gray-a11);
+}
+
+/* ── Trailing cluster: change magnitude (+N −N) with the action overlaid ────────*/
+
+/* Above the stretched row click target via DOM order (so the action is clickable)
+ * but below the sticky section header (no z-index, so the cluster never bleeds
+ * over it on scroll). A 1-cell grid stacks the counts/letter and the action so the
+ * action overlays them with no layout shift, both centred by the grid
+ * (align-self: stretch gives the full row height). Transparent to clicks itself —
+ * only the action opts back in — so clicking the counts still opens the file. */
+.row-end {
+  position: relative;
+  align-self: stretch;
+  flex: 0 0 auto;
+  display: grid;
+  align-items: center;
+  justify-items: end;
+  min-width: 28px;
+  pointer-events: none;
+}
+
+.row-end > * {
+  grid-area: 1 / 1;
+}
+
+/* The change magnitude + status letter, faded out when the action takes over. */
+.row-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity var(--dur-hover) ease;
+}
+
+/* The git signal — added / removed line counts, monospace and tabular. */
+.row-stat__counts {
+  display: inline-flex;
+  gap: 5px;
+  font-family: var(--code-font-family);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings:
+    "tnum" 1,
+    "liga" 0;
+}
+
+.row-stat__add {
+  color: var(--green-11);
+}
+
+.row-stat__del {
+  color: var(--red-11);
+}
+
+/* The action overlays the counts (same grid cell), hidden until the row is
+ * hovered, selected, or has a write in flight. `margin: 0` cancels the Radix
+ * ghost IconButton's optical negative margins so it stays centred and flush. */
+.row-act {
+  margin: 0;
   opacity: 0;
+  /* Click-through while hidden so a right-edge click opens the file rather than
+   * silently validating; re-enabled with the reveal below. */
+  pointer-events: none;
+  transition: opacity var(--dur-hover) ease;
 }
 
 .file-row:hover .row-act,
@@ -681,14 +1072,54 @@ body {
 .tree-file[data-selected="true"] .row-act,
 .row-act[data-pending] {
   opacity: 1;
+  pointer-events: auto;
 }
 
-.file-row[data-selected="true"],
-.tree-file[data-selected="true"] {
-  background: var(--accent-a3);
+.file-row:hover .row-stat,
+.tree-file:hover .row-stat,
+.file-row[data-selected="true"] .row-stat,
+.tree-file[data-selected="true"] .row-stat,
+.file-row[data-pending="true"] .row-stat,
+.tree-file[data-pending="true"] .row-stat {
+  opacity: 0;
 }
 
-/* ── Diff panel ───────────────────────────────────────────────────────────── */
+/* ── Sidebar completion — the earned beat inside the queue ──────────────────────*/
+
+.sidebar-complete {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 10px 12px;
+}
+
+.sidebar-complete__mark {
+  color: var(--accent-11);
+  animation: complete-in var(--dur-celebrate) var(--ease-out) both;
+}
+
+.sidebar-complete__title {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--gray-12);
+}
+
+.sidebar-complete__sub {
+  font-size: 11px;
+  color: var(--gray-a10);
+}
+
+/* ── Layout toggle ─────────────────────────────────────────────────────────────*/
+
+.view-toggle__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Diff panel ────────────────────────────────────────────────────────────────*/
 
 .diff-panel {
   display: flex;
@@ -702,13 +1133,23 @@ body {
   padding: 24px;
 }
 
+/* Sticky path header: the file under review, its status mark, and the line delta. */
 .diff-panel__head {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 40px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--gtg-hairline);
+}
+
+.diff-panel__id {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--gray-a4);
+  min-width: 0;
 }
 
 .diff-panel__path {
@@ -716,9 +1157,31 @@ body {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-family: var(--code-font-family, ui-monospace, monospace);
-  font-size: var(--font-size-2);
+  font-family: var(--code-font-family);
+  font-size: 12.5px;
+  font-feature-settings:
+    "liga" 0,
+    "tnum" 1;
   color: var(--gray-12);
+}
+
+/* Per-file line delta — added/removed counts, quiet but informative. */
+.diff-stat {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--code-font-family);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff-stat__add {
+  color: var(--green-11);
+}
+
+.diff-stat__del {
+  color: var(--red-11);
 }
 
 /* The body delegates scrolling to the virtualized .diff-scroll inside it. */
@@ -729,27 +1192,96 @@ body {
   flex-direction: column;
 }
 
-.diff-empty {
-  display: block;
-  padding: 16px;
+/* ── Diff notices (empty / binary / rename / loading / completion) ─────────────*/
+
+.diff-notice {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  text-align: center;
 }
 
-/* ── Diff rendering (virtualized) ─────────────────────────────────────────── */
+.diff-notice__icon {
+  color: var(--gray-a7);
+}
+
+.diff-notice__text {
+  max-width: 36ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gray-a10);
+}
+
+/* The one notice that carries an error (a failed diff read). */
+.diff-notice__text--error {
+  color: var(--red-11);
+}
+
+/* ── Completion state — the earned beat when the queue is burned down ──────────*/
+
+.review-complete {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px;
+  text-align: center;
+}
+
+.review-complete__mark {
+  color: var(--accent-11);
+  animation: complete-in var(--dur-celebrate) var(--ease-out) both;
+}
+
+.review-complete__title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--gray-12);
+}
+
+.review-complete__sub {
+  font-size: 12.5px;
+  color: var(--gray-a10);
+}
+
+@keyframes complete-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ── Diff rendering (virtualized) ──────────────────────────────────────────────*/
 
 /* The scroll viewport: vertical virtualization, horizontal scroll for long lines. */
 .diff-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  font-family: var(--code-font-family, ui-monospace, monospace);
-  font-size: var(--font-size-1);
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-a6) transparent;
+  font-family: var(--code-font-family);
+  font-size: 13px;
+  line-height: 20px;
+  /* Diffs are columnar text: literal glyphs, stable advance widths, no ligatures. */
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0,
+    "tnum" 1;
 }
 
-/* Spacer sized to the full diff height; rows are absolutely positioned within.
- * Its width is set inline per file (the widest line), so the horizontal scroll
- * extent is stable regardless of which rows the virtualizer has mounted. */
+/* Spacer sized to the full diff height; rows are absolutely positioned within. Its
+ * width is set inline per file (the widest line), so the horizontal scroll extent
+ * is stable regardless of which rows the virtualizer has mounted. */
 .diff-sizer {
   position: relative;
   min-width: 100%;
@@ -768,17 +1300,19 @@ body {
 .diff-hunk-head {
   height: var(--diff-row-height, 20px);
   line-height: var(--diff-row-height, 20px);
-  padding: 0 10px;
+  padding: 0 12px;
   color: var(--accent-a11);
-  background: var(--accent-a2);
+  background: var(--gtg-raised);
+  border-top: 1px solid var(--gtg-hairline);
+  border-bottom: 1px solid var(--gtg-hairline);
   white-space: pre;
   user-select: none;
 }
 
 .diff-line {
   display: grid;
-  /* The two number gutters size to the file's widest line number (set inline as
-   * --diff-no-width), so a 4+ digit number never overflows its track. */
+  /* Two number gutters size to the file's widest line number (set inline as
+   * --diff-no-width), then the sign, then the content. */
   grid-template-columns: var(--diff-no-width, 4ch) var(--diff-no-width, 4ch) 2ch 1fr;
   height: var(--diff-row-height, 20px);
   line-height: var(--diff-row-height, 20px);
@@ -791,14 +1325,19 @@ body {
   user-select: none;
 }
 
+/* A hairline detaches the line-number gutter from the code column. Drawn on the
+ * sign cell's left edge; rows are contiguous so it reads as one continuous line. */
 .diff-line__sign {
   text-align: center;
+  color: var(--gray-a8);
   user-select: none;
+  box-shadow: inset 1px 0 var(--gtg-divider);
 }
 
 .diff-line__content {
   white-space: pre;
   font: inherit;
+  padding-right: 12px;
 }
 
 /* Shiki token: per-theme colors carried as CSS vars, switched by Radix's .dark. */
@@ -810,18 +1349,45 @@ body {
   color: var(--sd, inherit);
 }
 
+/* Add / delete: a faint line wash + a quiet same-hue gutter rail and sign. The
+ * bright fill is reserved for changed tokens (intra-line word diff, a later pass). */
 .diff-line--add {
   background: var(--green-a3);
+  box-shadow: inset 2px 0 var(--green-a7);
 }
 
 .diff-line--add .diff-line__sign {
   color: var(--green-11);
+  box-shadow: inset 1px 0 var(--green-a5);
 }
 
 .diff-line--delete {
   background: var(--red-a3);
+  box-shadow: inset 2px 0 var(--red-a7);
 }
 
 .diff-line--delete .diff-line__sign {
   color: var(--red-11);
+  box-shadow: inset 1px 0 var(--red-a5);
+}
+
+/* ── Menus / overlays ──────────────────────────────────────────────────────────
+ * The only floating surfaces carry the single shadow token (the design system's
+ * "overlays only" elevation), replacing Radix's default popover shadow. */
+.repo-menu__content {
+  box-shadow: var(--gtg-shadow-overlay);
+}
+
+/* ── Reduced motion ────────────────────────────────────────────────────────────
+ * Every transition and the completion beat read a --dur-* token, so collapsing the
+ * tokens to 0s neutralises movement app-wide without an !important sledgehammer.
+ * Instant state changes and colour fades are vestibular-safe, so they stay. */
+@media (prefers-reduced-motion: reduce) {
+  .radix-themes {
+    --dur-hover: 0s;
+    --dur-selection: 0s;
+    --dur-disclosure: 0s;
+    --dur-enter: 0s;
+    --dur-celebrate: 0s;
+  }
 }

@@ -10,6 +10,6 @@ import { AppVersion } from './app-version'
 describe('AppVersion', () => {
   it('renders the running app version once resolved', async () => {
     render(<AppVersion />)
-    expect(await screen.findByText('Gitting v0.2.1')).toBeInTheDocument()
+    expect(await screen.findByText('gitting v0.2.1')).toBeInTheDocument()
   })
 })

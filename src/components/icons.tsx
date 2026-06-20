@@ -137,3 +137,67 @@ export function TreeIcon() {
     </StrokeIcon>
   )
 }
+
+/**
+ * The brand glyph: a stacked plus over minus — the diff gutter's own vocabulary,
+ * monochrome. Identity that emerges from the domain, not decoration. Sized by the
+ * caller (welcome mark, completion state).
+ */
+export function BrandMark({ size = 28 }: { size?: number }) {
+  return (
+    <StrokeIcon viewBox="0 0 24 24" size={size} strokeWidth={2.2}>
+      <path d="M12 5v8M8 9h8" />
+      <path d="M8 17.5h8" />
+    </StrokeIcon>
+  )
+}
+
+/** Vertical three-dot overflow handle for a menu trigger. */
+export function KebabIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+      <circle cx="8" cy="3.4" r="1.15" />
+      <circle cx="8" cy="8" r="1.15" />
+      <circle cx="8" cy="12.6" r="1.15" />
+    </svg>
+  )
+}
+
+/** A check inside a circle — the queue-cleared completion mark. */
+export function CheckCircleIcon({ size = 40 }: { size?: number }) {
+  return (
+    <StrokeIcon viewBox="0 0 24 24" size={size} strokeWidth={1.6}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 12.4 10.8 15.2 16 9.2" />
+    </StrokeIcon>
+  )
+}
+
+/** A neutral document glyph for diff notices (binary, submodule, empty…). */
+export function DocumentIcon({ size = 30 }: { size?: number }) {
+  return (
+    <StrokeIcon viewBox="0 0 24 24" size={size} strokeWidth={1.5}>
+      <path d="M6 3.5h7l5 5V20a.5.5 0 0 1-.5.5h-11A.5.5 0 0 1 6 20Z" />
+      <path d="M13 3.5V8.5h5" />
+    </StrokeIcon>
+  )
+}
+
+/** Magnifier glyph — the sidebar's file filter. */
+export function SearchIcon({ size = 14 }: { size?: number }) {
+  return (
+    <StrokeIcon size={size} strokeWidth={1.5}>
+      <circle cx="7" cy="7" r="4.2" />
+      <path d="M10.2 10.2 14 14" />
+    </StrokeIcon>
+  )
+}
+
+/** A small cross — clears the filter. */
+export function XIcon({ size = 13 }: { size?: number }) {
+  return (
+    <StrokeIcon size={size} strokeWidth={1.5}>
+      <path d="M4 4 12 12M12 4 4 12" />
+    </StrokeIcon>
+  )
+}

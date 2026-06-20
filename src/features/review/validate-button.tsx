@@ -9,7 +9,9 @@ import { useRowActions } from './row-context'
  * or a back-arrow to un-validate (unstage) a staged one. Revealed on row hover
  * (via `.row-act`); shared by the flat list and the tree. While its index write
  * is in flight the button spins and is disabled, so it stays visible and a
- * second click can't queue a duplicate write.
+ * second click can't queue a duplicate write. Kept out of the Tab order
+ * (`tabIndex={-1}`): the keyboard model validates via Enter / Backspace, so a
+ * tabbable-but-invisible button would be a dead stop.
  */
 export function ValidateButton({ section, path }: { section: DiffSection; path: string }) {
   const { act } = useRowActions()
@@ -23,6 +25,7 @@ export function ValidateButton({ section, path }: { section: DiffSection; path: 
         variant="ghost"
         color="gray"
         size="1"
+        tabIndex={-1}
         aria-label={validate ? `Valider ${path}` : `Dévalider ${path}`}
         loading={pending}
         disabled={pending}

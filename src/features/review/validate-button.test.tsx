@@ -30,4 +30,12 @@ describe('ValidateButton', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dévalider src/a.ts' }))
     expect(act).toHaveBeenCalledWith('staged', 'src/a.ts')
   })
+
+  it('stays out of the Tab order (the keyboard model validates via the list)', () => {
+    renderWith('unstaged', vi.fn())
+    expect(screen.getByRole('button', { name: 'Valider src/a.ts' })).toHaveAttribute(
+      'tabindex',
+      '-1',
+    )
+  })
 })

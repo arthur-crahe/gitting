@@ -1,5 +1,4 @@
 import { Button } from '@radix-ui/themes'
-import { pickRepoDirectory } from '../../lib/git'
 import { useRepoStore } from '../../stores/use-repo-store'
 
 /**
@@ -22,14 +21,7 @@ export function RepoPicker({
   label?: string
 }) {
   const phase = useRepoStore((s) => s.phase)
-  const open = useRepoStore((s) => s.open)
-
-  const choose = async () => {
-    const path = await pickRepoDirectory()
-    if (path) {
-      await open(path)
-    }
-  }
+  const openViaDialog = useRepoStore((s) => s.openViaDialog)
 
   return (
     <Button
@@ -37,7 +29,7 @@ export function RepoPicker({
       size={size}
       disabled={phase === 'loading'}
       loading={phase === 'loading'}
-      onClick={() => void choose()}
+      onClick={() => void openViaDialog()}
     >
       {label}
     </Button>

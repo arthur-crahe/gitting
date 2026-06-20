@@ -2,16 +2,19 @@ import { useCallback, useMemo, useState } from 'react'
 import { Chevron } from '../../components/icons'
 import type { StatusEntry } from '../../lib/git'
 import type { DiffSection } from '../../stores/use-diff-store'
+import { useRepoStore } from '../../stores/use-repo-store'
 import { changeKindGlyph } from './change-kind'
 import { buildFileTree, type FileNode, type TreeNode } from './file-tree'
+import { FileTypeIcon, FolderTypeIcon } from './file-type-icon'
 import { useIsSelected, useRowActions } from './row-context'
-import { StatusGlyph } from './status-glyph'
-import { ValidateButton } from './validate-button'
+import { RowEnd } from './row-end'
 
 /** Base left inset (px), matching the flat list's row padding. */
 const ROW_INSET = 8
-/** Extra left inset (px) per nesting depth. */
-const INDENT_STEP = 16
+/** Extra left inset (px) per nesting depth (condensed, VSCode-like). */
+const INDENT_STEP = 12
+/** Shared empty set so a forced-open tree never allocates one per render. */
+const NONE: ReadonlySet<string> = new Set()
 
 /** Left padding for a row at the given depth. */
 function inset(depth: number): number {
@@ -29,6 +32,8 @@ interface RowProps {
   depth: number
   /** Which review section the tree belongs to. */
   section: DiffSection
+  /** Step file rows back as done work (the "Validé" archive). */
+  recede?: boolean
   /** Directory paths that are currently collapsed. */
   collapsed: ReadonlySet<string>
   /** Flip a directory's collapsed state. */
@@ -40,35 +45,48 @@ function TreeFile({
   node,
   depth,
   section,
+  recede,
 }: {
   node: FileNode
   depth: number
   section: DiffSection
+  recede?: boolean
 }) {
   const { select } = useRowActions()
   const selected = useIsSelected(section, node.entry.path)
+  const pending = useRepoStore((s) => s.pendingPaths.has(node.entry.path))
   const glyph = changeKindGlyph(node.entry.kind)
   return (
-    <div className="tree-file" style={{ paddingLeft: inset(depth) }} data-selected={selected}>
+    <div
+      className="tree-file"
+      style={{ paddingLeft: inset(depth) }}
+      data-selected={selected || undefined}
+      data-recede={recede || undefined}
+      data-pending={pending || undefined}
+    >
       <button
         type="button"
         className="tree-file__select"
+        data-file-row=""
+        data-section={section}
+        data-path={node.entry.path}
+        tabIndex={-1}
         onClick={() => select(section, node.entry.path)}
         title={`${glyph.label} — ${node.entry.path}`}
         aria-current={selected ? 'true' : undefined}
       >
-        <StatusGlyph kind={node.entry.kind} />
+        <FileTypeIcon name={node.name} />
         <span className="tree-file__name">{node.name}</span>
       </button>
-      <ValidateButton section={section} path={node.entry.path} />
+      <RowEnd section={section} path={node.entry.path} kind={node.entry.kind} />
     </div>
   )
 }
 
 /** One tree row: a collapsible directory (with its children) or a file leaf. */
-function NodeRow({ node, depth, section, collapsed, onToggle }: RowProps) {
+function NodeRow({ node, depth, section, recede, collapsed, onToggle }: RowProps) {
   if (node.type === 'file') {
-    return <TreeFile node={node} depth={depth} section={section} />
+    return <TreeFile node={node} depth={depth} section={section} recede={recede} />
   }
 
   const open = !collapsed.has(node.path)
@@ -83,6 +101,7 @@ function NodeRow({ node, depth, section, collapsed, onToggle }: RowProps) {
         title={node.path}
       >
         <Chevron open={open} className="disclosure-chevron" />
+        <FolderTypeIcon name={node.name} />
         <span className="tree-folder__name">{node.name}</span>
       </button>
       {open
@@ -92,6 +111,7 @@ function NodeRow({ node, depth, section, collapsed, onToggle }: RowProps) {
               node={child}
               depth={depth + 1}
               section={section}
+              recede={recede}
               collapsed={collapsed}
               onToggle={onToggle}
             />
@@ -104,17 +124,22 @@ function NodeRow({ node, depth, section, collapsed, onToggle }: RowProps) {
 /**
  * Tree layout of a section's changed files: collapsible directories (compacted
  * VSCode-style by {@link buildFileTree}) with file leaves carrying their status
- * glyph. Everything is expanded by default; collapsed directories are tracked in
- * component-local state that persists across an entries change (a stage/unstage)
- * and resets only when the component unmounts — on a section toggle or a switch
- * back to the list.
+ * glyph and sans name. Everything is expanded by default; collapsed directories
+ * are tracked in component-local state that persists across an entries change (a
+ * stage/unstage) and resets only when the component unmounts. While `forceExpand`
+ * is set (the filter is active) every directory is shown open so matches are
+ * always visible, without discarding the user's collapse state.
  */
 export function FileTree({
   entries,
   section,
+  recede,
+  forceExpand,
 }: {
   entries: readonly StatusEntry[]
   section: DiffSection
+  recede?: boolean
+  forceExpand?: boolean
 }) {
   const tree = useMemo(() => buildFileTree(entries), [entries])
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
@@ -139,7 +164,8 @@ export function FileTree({
           node={node}
           depth={0}
           section={section}
-          collapsed={collapsed}
+          recede={recede}
+          collapsed={forceExpand ? NONE : collapsed}
           onToggle={toggle}
         />
       ))}
