@@ -24,7 +24,7 @@ Section 1 empty ⇒ everything has been reviewed.
 
 ```
 CLAUDE.md            this file
-package.json         frontend manifest (pnpm) — versions TODO
+package.json         frontend manifest (pnpm)
 pnpm-workspace.yaml  pnpm settings + build-script allowlist
 tsconfig.json        strict TS for the app (src/)
 tsconfig.node.json   strict TS for build tooling (vite/vitest config)

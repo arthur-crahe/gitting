@@ -24,7 +24,6 @@ export function StrokeIcon({
   children,
 }: StrokeIconProps) {
   return (
-    // biome-ignore lint/a11y/noSvgWithoutTitle: decorative glyph; the enclosing control provides the accessible name.
     <svg
       viewBox={viewBox}
       width={size}
@@ -34,7 +33,7 @@ export function StrokeIcon({
       strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden
+      aria-hidden="true"
     >
       {children}
     </svg>

@@ -16,14 +16,14 @@ Rust + Tauri 2. Entry split: `src/main.rs` is the thin binary (`app_lib::run()`)
 
 Keep this in one module behind a trait so it can swap to native `gix` once index mutation lands. Invoke `git` directly (no shell), validate paths, pass `--` before the path, and surface exit code/stderr as a structured error. Do **not** use `gix`'s `worktree-mutation` feature for staging — that is checkout/reset, not per-file index editing.
 
-## Module layout (to implement)
+## Module layout
 
-- `git/` — gix layer: `repo` (open/discover), `status`, `diff` (unstaged/staged), `index_write` (the isolated shell-out), `error` (one `thiserror` enum, `serde::Serialize`).
-- `commands/` — Tauri commands, thin wrappers over `git/`: `status`, `diff_unstaged`, `diff_staged`, `stage_file`, `unstage_file`. Async, owned `String` args, `Result<T, CommandError>`. Register via `generate_handler!` in `lib.rs`.
+- `git/` — gix layer: `repo` (open/discover), `status`, `diff` (unstaged/staged + per-file `diff_stats`), `index_write` (the isolated shell-out), `error` (one `thiserror` enum, `serde::Serialize`).
+- `commands/` — Tauri commands, thin wrappers over `git/`: `open_repo`, `repo_status`, `diff_unstaged`, `diff_staged`, `diff_stats`, `stage_file`, `unstage_file`. Async, owned `String` args, `Result<T, GitError>`. Registered via `generate_handler!` in `lib.rs`.
 
 ## Notes
 
 - Custom commands need no plugin permission; `capabilities/default.json` grants `core:default` to the `main` window. Add plugin permissions there only if a plugin is introduced.
-- Versions are `TODO` (see root `CLAUDE.md`): `gix` needs Rust ≥ 1.85; `tauri`/`tauri-build`/`@tauri-apps/cli` share a minor.
+- Version constraints: `gix` needs Rust ≥ 1.85; `tauri`/`tauri-build`/`@tauri-apps/cli` share a minor.
 - Icons in `icons/` are generated later via `pnpm tauri icon <source.png>` — not hand-authored.
 - `gen/` is build-generated (gitignored) — never authored or committed.
