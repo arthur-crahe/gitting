@@ -21,3 +21,4 @@ pnpm-debug.log*
 # Local env & OS/editor cruft
 *.local
 .DS_Store
+.idea/
