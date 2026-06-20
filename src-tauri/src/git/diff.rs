@@ -159,9 +159,12 @@ fn unstaged_file(
                 return Ok(None);
             };
             let path = path_string(&rela_path);
-            // A conflicted file has no single meaningful index→worktree diff in
-            // the review model; surface it without hunks for a dedicated notice.
-            if matches!(kind, ChangeKind::Conflict) {
+            // A conflicted file, or a type change (blob ↔ symlink ↔ directory),
+            // has no single meaningful index→worktree line diff in the review
+            // model — and the new side of a type change may not even be a readable
+            // blob. Surface either without hunks for a dedicated notice rather than
+            // handing a non-blob worktree entry to the diff pipeline.
+            if matches!(kind, ChangeKind::Conflict | ChangeKind::TypeChange) {
                 return Ok(Some(notice(path, kind)));
             }
             // old = the index blob; new = the worktree (a null id read via the
@@ -175,6 +178,14 @@ fn unstaged_file(
                 return Ok(None);
             }
             let path = path_string(&entry.rela_path);
+            // Only a regular file has a blob the diff pipeline can open. The
+            // dirwalk collapses an untracked directory into a single entry; that —
+            // like a nested repository, a symlink, or a non-regular file (FIFO,
+            // socket) — has no readable blob, so reading it as text would fail and
+            // blank the whole section. List it without hunks instead.
+            if !matches!(entry.disk_kind, Some(gix::dir::entry::Kind::File)) {
+                return Ok(Some(notice(path, ChangeKind::Untracked)));
+            }
             // old absent (empty), new = the untracked worktree file.
             Ok(Some(assemble(repo, cache, path, ChangeKind::Untracked, None, None, null)?))
         }
@@ -541,5 +552,58 @@ mod tests {
         assert!(sub.hunks.is_empty(), "no hunks for a gitlink");
         // The sibling file still carries its diff — the section was not abandoned.
         assert!(staged.iter().any(|f| f.path == "a.txt" && !f.hunks.is_empty()));
+    }
+
+    #[test]
+    fn untracked_directory_is_listed_without_erroring_the_section() {
+        let repo = TempRepo::init();
+        repo.write("a.txt", "x\n");
+        repo.stage("a.txt");
+        repo.commit("seed");
+
+        // A reviewable worktree edit alongside a brand-new untracked directory. The
+        // dirwalk collapses the directory into a single entry that has no blob to
+        // open — reading it as a file must not fail the whole unstaged diff.
+        repo.write("a.txt", "y\n");
+        repo.write("newdir/nested.txt", "hello\n");
+
+        let files = diff_unstaged(repo.path()).expect("an untracked dir must not error the diff");
+
+        // The collapsed directory entry is listed verbatim (gix emits no trailing
+        // slash) and carries no hunks.
+        let dir = files.iter().find(|f| f.path == "newdir").expect("untracked directory listed");
+        assert!(matches!(dir.change_kind, ChangeKind::Untracked));
+        assert!(dir.hunks.is_empty(), "no hunks for a directory entry");
+        assert!(!dir.is_binary);
+
+        // The sibling file still carries its real diff — the section was not abandoned.
+        let edited = files.iter().find(|f| f.path == "a.txt").expect("a.txt listed");
+        assert!(!edited.hunks.is_empty(), "the reviewable file keeps its hunks");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn untracked_symlink_is_listed_without_erroring_the_section() {
+        let repo = TempRepo::init();
+        repo.write("a.txt", "x\n");
+        repo.stage("a.txt");
+        repo.commit("seed");
+
+        // A brand-new untracked symlink: a non-`File` disk kind that also has no
+        // blob the diff pipeline can open. Like the directory case, it must be
+        // surfaced as a hunkless notice rather than failing the whole section.
+        repo.write("a.txt", "y\n");
+        std::os::unix::fs::symlink("a.txt", repo.path().join("link")).expect("create symlink");
+
+        let files = diff_unstaged(repo.path()).expect("an untracked symlink must not error the diff");
+
+        let link = files.iter().find(|f| f.path == "link").expect("untracked symlink listed");
+        assert!(matches!(link.change_kind, ChangeKind::Untracked));
+        assert!(link.hunks.is_empty(), "no hunks for a symlink entry");
+        assert!(!link.is_binary);
+
+        // The sibling file still carries its real diff — the section was not abandoned.
+        let edited = files.iter().find(|f| f.path == "a.txt").expect("a.txt listed");
+        assert!(!edited.hunks.is_empty(), "the reviewable file keeps its hunks");
     }
 }
