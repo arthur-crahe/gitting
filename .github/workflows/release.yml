@@ -57,6 +57,34 @@ jobs:
       # tauri-action runs `pnpm build` (beforeBuildCommand) + the release build,
       # bundles every installer in bundle.targets, and uploads them to a single
       # GitHub Release for this tag. @v1 does not exist — use @v0 (or pin @v0.6.2).
+      # Pull the section for this tag's version out of CHANGELOG.md (written by
+      # the /release command) and use it as the Release body. Runs identically on
+      # ubuntu and windows; on a workflow_dispatch with no matching section it
+      # falls back to the download line alone. github-script@v8 -> Node 24.
+      - name: Compose release notes from CHANGELOG.md
+        id: notes
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const version = context.ref.replace(/^refs\/tags\/app-v/, '');
+            const footer = "Téléchargez l'installeur correspondant à votre système ci-dessous.";
+            let section = '';
+            try {
+              const lines = fs.readFileSync('CHANGELOG.md', 'utf8').split('\n');
+              const start = lines.findIndex((l) => l.startsWith(`## [${version}]`));
+              if (start !== -1) {
+                let end = lines.findIndex((l, i) => i > start && l.startsWith('## ['));
+                if (end === -1) end = lines.length;
+                section = lines.slice(start + 1, end).join('\n').trim();
+              } else {
+                core.warning(`No CHANGELOG.md section for ${version}; using the footer alone.`);
+              }
+            } catch (err) {
+              core.warning(`Could not read CHANGELOG.md: ${err.message}`);
+            }
+            core.setOutput('body', section ? `${section}\n\n---\n\n${footer}` : footer);
+
       - name: Build and create draft Release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -68,7 +96,7 @@ jobs:
         with:
           tagName: app-v__VERSION__
           releaseName: 'Gitting v__VERSION__'
-          releaseBody: "Téléchargez l'installeur correspondant à votre système ci-dessous."
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
           # Both NSIS .exe and MSI are built; point the updater manifest at NSIS.

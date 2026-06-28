@@ -1,0 +1,20 @@
+# Changelog
+
+Notes de version de Gitting, de la plus récente à la plus ancienne, à destination des utilisateurs. Le format suit [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) et le projet respecte le [versionnage sémantique](https://semver.org/spec/v2.0.0.html). Chaque section est générée par la commande `/release` comme un résumé orienté utilisateur des changements depuis la version précédente, et devient la description de la Release GitHub correspondante.
+
+<!-- release:anchor — /release inserts the new version section directly below this line -->
+
+## [0.5.0] - 2026-06-20
+
+### Nouveautés
+- Visualiseur de diff complet avec coloration syntaxique, parcouru fichier par fichier dans un panneau maître-détail.
+- Review au niveau du fichier : validez un fichier (stage) ou renvoyez-le à reviewer (unstage) d'un geste.
+- Barre latérale repensée : filtre, statistiques par fichier, suivi d'avancement (burn-down), navigation au clavier et largeur ajustable.
+
+### Corrections
+- Le diff reste affiché dans les cas limites (changements de type, entrées non suivies, sous-modules, erreurs de statut).
+- L'état du diff est correctement réinitialisé au changement de dépôt.
+
+### Autres améliorations
+- Améliorations de performance.
+- Améliorations de sécurité.
