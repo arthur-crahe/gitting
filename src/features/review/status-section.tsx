@@ -1,7 +1,9 @@
+import { Tooltip } from '@radix-ui/themes'
 import { type ReactNode, type RefObject, useId, useMemo } from 'react'
-import { Chevron } from '../../components/icons'
+import { CheckAllIcon, Chevron, UndoIcon } from '../../components/icons'
 import type { StatusEntry } from '../../lib/git'
 import type { DiffSection } from '../../stores/use-diff-store'
+import { useRepoStore } from '../../stores/use-repo-store'
 import type { ViewMode } from '../../stores/use-view-store'
 import { filterEntries, normalizeQuery } from './file-filter'
 import { FileRow } from './file-row'
@@ -54,10 +56,21 @@ export function StatusSection({
 }: StatusSectionProps) {
   const [sentinelRef, stuck] = useStuck(scrollRef)
   const titleId = useId()
+  const stageMany = useRepoStore((s) => s.stageMany)
+  const unstageMany = useRepoStore((s) => s.unstageMany)
   const filtering = normalizeQuery(query) !== ''
   const filtered = useMemo(() => filterEntries(entries, query), [entries, query])
   const isQueue = section === 'unstaged'
   const count = filtering ? `${filtered.length} / ${entries.length}` : `${entries.length}`
+
+  // "Tout valider" / "Tout dévalider": one batched stage/unstage over exactly the
+  // files currently shown (so it honours an active filter, and equals the whole
+  // section when there is none). Hidden when nothing is shown.
+  const bulkLabel = isQueue ? 'Tout valider' : 'Tout dévalider'
+  const runBulk = () => {
+    const paths = filtered.map((entry) => entry.path)
+    void (isQueue ? stageMany(paths) : unstageMany(paths))
+  }
 
   // Built only when the section is open — a collapsed archive must not construct
   // (and reconcile) all of its row elements on every render.
@@ -82,19 +95,38 @@ export function StatusSection({
   return (
     <section className="review-section" data-section={section} aria-labelledby={titleId}>
       <div className="review-section__sentinel" ref={sentinelRef} aria-hidden="true" />
-      <button
-        type="button"
+      <div
         className="review-section__head"
         data-stuck={stuck || undefined}
-        aria-expanded={open}
-        onClick={onToggle}
+        data-bulkable={filtered.length > 0 || undefined}
       >
-        <span className="review-section__title">
-          <Chevron open={open} className="disclosure-chevron" />
-          <span className="review-section__title-text" id={titleId}>
-            {title}
+        <button
+          type="button"
+          className="review-section__toggle"
+          aria-expanded={open}
+          onClick={onToggle}
+        >
+          <span className="review-section__title">
+            <Chevron open={open} className="disclosure-chevron" />
+            <span className="review-section__title-text" id={titleId}>
+              {title}
+            </span>
           </span>
-        </span>
+        </button>
+        {filtered.length > 0 ? (
+          <Tooltip content={bulkLabel}>
+            <button
+              type="button"
+              className={
+                isQueue ? 'review-section__bulk' : 'review-section__bulk review-section__bulk--undo'
+              }
+              onClick={runBulk}
+              aria-label={bulkLabel}
+            >
+              {isQueue ? <CheckAllIcon /> : <UndoIcon />}
+            </button>
+          </Tooltip>
+        ) : null}
         <span
           className={
             isQueue ? 'review-section__count review-section__count--queue' : 'review-section__count'
@@ -103,7 +135,7 @@ export function StatusSection({
         >
           {count}
         </span>
-      </button>
+      </div>
       {open ? renderBody() : null}
     </section>
   )

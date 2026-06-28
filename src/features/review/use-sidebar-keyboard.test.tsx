@@ -120,6 +120,38 @@ describe('useSidebarKeyboard', () => {
     expect(actions.select).toHaveBeenLastCalledWith('unstaged', 'a.ts')
   })
 
+  it('throttles a held arrow: opens on the leading edge, then the landed file', () => {
+    vi.useFakeTimers()
+    try {
+      const actions = makeActions()
+      render(<Harness actions={actions} />)
+      const a = screen.getByText('a')
+      a.focus()
+      // Auto-repeat opens immediately on the leading edge — the diff is never
+      // frozen while the key is held — and the cursor advances on every repeat.
+      fireEvent.keyDown(a, { key: 'ArrowDown', repeat: true })
+      expect(actions.select).toHaveBeenCalledTimes(1)
+      expect(actions.select).toHaveBeenLastCalledWith('unstaged', 'b.ts')
+      // A further repeat inside the window is throttled (no extra open yet)…
+      fireEvent.keyDown(screen.getByText('b'), { key: 'ArrowDown', repeat: true })
+      expect(actions.select).toHaveBeenCalledTimes(1)
+      expect(document.activeElement).toBe(screen.getByText('c'))
+      // …until the cadence boundary, when the diff catches up to the landed row.
+      vi.advanceTimersByTime(100)
+      expect(actions.select).toHaveBeenCalledTimes(2)
+      expect(actions.select).toHaveBeenLastCalledWith('staged', 'c.ts')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('opens immediately on a single (non-repeat) arrow press', () => {
+    const actions = makeActions()
+    render(<Harness actions={actions} />)
+    fireEvent.keyDown(screen.getByText('a'), { key: 'ArrowDown' })
+    expect(actions.select).toHaveBeenCalledWith('unstaged', 'b.ts')
+  })
+
   it('jumps to the first and last row on Home / End', () => {
     const actions = makeActions()
     render(<Harness actions={actions} />)

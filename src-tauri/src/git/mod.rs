@@ -18,7 +18,7 @@ mod test_support;
 
 pub use diff::{diff_staged, diff_stats, diff_unstaged};
 pub use error::GitError;
-pub use index_write::{stage_file, unstage_file};
+pub use index_write::{stage_file, stage_files, unstage_file, unstage_files};
 pub use repo::open_repo;
 pub use status::read_status;
 

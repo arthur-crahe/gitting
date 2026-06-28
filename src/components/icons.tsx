@@ -106,33 +106,43 @@ export function CheckIcon() {
   )
 }
 
-/** Curved back-arrow — un-validates (unstages) a file, sending it to review. */
+/** Double checkmark — validates the whole section at once ("tout valider"). */
+export function CheckAllIcon() {
+  return (
+    <StrokeIcon size={16} strokeWidth={1.5}>
+      <path d="M1.5 8.5 4.5 11.5 10 5" />
+      <path d="M8.5 11 9 11.5 14 5" />
+    </StrokeIcon>
+  )
+}
+
+/** Curved back-arrow — un-validates (unstages) a file, sending it to review. The
+ * glyph's bounding box is centred in the 16-unit viewBox so it sits vertically
+ * centred in its button (the previous path was bottom-heavy and rendered low). */
 export function UndoIcon() {
   return (
     <StrokeIcon size={14}>
-      <path d="M6 4 2.5 7.5 6 11" />
-      <path d="M2.5 7.5h7a4 4 0 0 1 0 8H7" />
+      <path d="M6 2.75 2.5 6.25 6 9.75" />
+      <path d="M2.5 6.25h6.5a3.5 3.5 0 0 1 0 7H6.5" />
     </StrokeIcon>
   )
 }
 
-/** Stacked horizontal lines — the flat-list view in the layout toggle. */
+/** Three equal rows — the flat-list view in the layout toggle. Rendered at the
+ * native 16 (like the other toolbar glyphs) so the lines stay pixel-crisp. */
 export function ListIcon() {
   return (
-    <StrokeIcon size={14}>
-      <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />
+    <StrokeIcon strokeWidth={1.5}>
+      <path d="M3 4h10M3 8h10M3 12h10" />
     </StrokeIcon>
   )
 }
 
-/** A root row with two branching children — the tree view in the layout toggle. */
+/** A parent row over two indented children — the tree view in the layout toggle. */
 export function TreeIcon() {
   return (
-    <StrokeIcon size={14}>
-      <path d="M2.5 3.5h11" />
-      <path d="M5 3.5v9" />
-      <path d="M5 8h8.5" />
-      <path d="M5 12h8.5" />
+    <StrokeIcon strokeWidth={1.5}>
+      <path d="M3 4h10M7 8h6M7 12h6" />
     </StrokeIcon>
   )
 }

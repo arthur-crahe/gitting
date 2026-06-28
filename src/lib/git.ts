@@ -180,6 +180,26 @@ export function unstageFile(path: string, file: string): Promise<void> {
 }
 
 /**
+ * Validates many files at once ("tout valider"): stages every `files` entry
+ * (repo-relative) in the repo at `path`. A no-op for an empty list.
+ *
+ * @throws if the index write fails (e.g. `git` is not installed).
+ */
+export function stageFiles(path: string, files: readonly string[]): Promise<void> {
+  return invoke<void>('stage_files', { path, files })
+}
+
+/**
+ * Un-validates many files at once ("tout dévalider"): unstages every `files`
+ * entry (repo-relative) in the repo at `path`. A no-op for an empty list.
+ *
+ * @throws if the index write fails (e.g. `git` is not installed).
+ */
+export function unstageFiles(path: string, files: readonly string[]): Promise<void> {
+  return invoke<void>('unstage_files', { path, files })
+}
+
+/**
  * Prompts for a directory to open as the repository.
  *
  * @returns the chosen absolute path, or `null` if the dialog was cancelled.

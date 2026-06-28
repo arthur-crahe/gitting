@@ -1193,6 +1193,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tempfile",
  "thiserror 2.0.18",
+ "webkit2gtk",
 ]
 
 [[package]]

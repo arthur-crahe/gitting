@@ -118,13 +118,16 @@ export function DiffView({ file }: { file: DiffFile }) {
             return null
           }
           return (
-            <div
-              key={row.key}
-              className="diff-row"
-              style={{ transform: `translateY(${item.start}px)` }}
-            >
+            // Positioned with `top` rather than `transform`: a transformed ancestor
+            // becomes the containing block for `position: sticky`, which would trap
+            // the line-number gutter and break its horizontal-scroll pinning.
+            <div key={row.key} className="diff-row" style={{ top: item.start }}>
               {row.type === 'header' ? (
-                <div className="diff-hunk-head">{row.text}</div>
+                <div className="diff-hunk-head">
+                  {/* Pinned to the left edge so the hunk range stays read-able
+                      while the code scrolls horizontally (like the line gutter). */}
+                  <span className="diff-hunk-head__text">{row.text}</span>
+                </div>
               ) : (
                 <DiffLineRow line={row.line} highlighter={highlighter} lang={lang} />
               )}

@@ -618,6 +618,15 @@ body {
   /* The file list never scrolls sideways — names truncate; only vertical. */
   overflow-x: hidden;
   overflow-y: auto;
+  /* Reserve the scrollbar track so its appearing/disappearing never reflows the
+     rows mid-scroll (a jank source). */
+  scrollbar-gutter: stable;
+  /* Keyboard navigation scrolls the selected row into view; these insets keep it
+     clear of the sticky section header above and leave look-ahead room below, so
+     the focused file is never jammed against an edge — nor hidden under the head —
+     unless it truly is the first/last of the list. */
+  scroll-padding-top: 56px;
+  scroll-padding-bottom: 44px;
   padding: 0 6px 16px;
 }
 
@@ -705,23 +714,93 @@ body {
   z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
   height: 30px;
   padding: 0 8px 0 10px;
-  border: 0;
   background: var(--gtg-sidebar);
-  color: inherit;
-  text-align: left;
-}
-
-button.review-section__head {
-  cursor: pointer;
 }
 
 .review-section__head[data-stuck="true"] {
   box-shadow: inset 0 -1px 0 var(--gtg-hairline);
+}
+
+/* The disclosure toggle. Its hit area stretches over the whole head (via ::after,
+ * anchored on the positioned head) so a click anywhere but the bulk action
+ * collapses/expands — the count and bulk button sit above it. */
+.review-section__toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.review-section__toggle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* "Tout valider" / "Tout dévalider": a hover-revealed batch action pinned to the
+ * head's right edge, over the (faded) count. Absolute, so it reserves no width
+ * when idle; above the toggle's stretched hit area so it stays clickable. */
+.review-section__bulk {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-2);
+  background: none;
+  color: var(--accent-11);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-hover) ease,
+    background-color var(--dur-hover) ease,
+    color var(--dur-hover) ease;
+}
+
+/* The archive's reversal ("tout dévalider") reads as a quieter, neutral action.
+ * A modifier (not a descendant selector) keeps every state at class specificity. */
+.review-section__bulk--undo {
+  color: var(--gray-a11);
+}
+
+.review-section__bulk:hover {
+  background: var(--accent-a3);
+  color: var(--accent-12);
+}
+
+.review-section__bulk--undo:hover {
+  background: var(--gray-a4);
+  color: var(--gray-12);
+}
+
+.review-section__bulk:focus-visible {
+  outline: 2px solid var(--accent-8);
+  outline-offset: -1px;
+}
+
+/* Revealed only when the head is hovered or the action is keyboard-focused. */
+.review-section__head:hover .review-section__bulk,
+.review-section__bulk:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .review-section__title {
@@ -769,6 +848,11 @@ button.review-section__head:hover .disclosure-chevron {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.006em;
   color: var(--gray-a10);
+  transition: opacity var(--dur-hover) ease;
+  /* Display only — let clicks fall through to the bulk action (which it overlaps
+   * once faded; opacity < 1 would otherwise stack it over and swallow the click)
+   * or, unhovered, to the toggle beneath. */
+  pointer-events: none;
 }
 
 /* The active-queue count is the burn-down number — a quiet accent badge. */
@@ -784,6 +868,14 @@ button.review-section__head:hover .disclosure-chevron {
 .review-section__count--queue[data-empty="true"] {
   color: var(--gray-a10);
   background: var(--gray-a3);
+}
+
+/* The count yields to the bulk action on hover (they share the right slot) — but
+ * only when there is one (a non-empty section); otherwise the count stays, since
+ * nothing would take its place. Last, so its specificity doesn't descend below the
+ * --queue overrides above. */
+.review-section__head[data-bulkable]:hover .review-section__count {
+  opacity: 0;
 }
 
 .review-section__empty {
@@ -1088,9 +1180,10 @@ button.review-section__head:hover .disclosure-chevron {
 .sidebar-complete {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 4px;
-  padding: 10px 10px 12px;
+  padding: 14px 10px;
+  text-align: center;
 }
 
 .sidebar-complete__mark {
@@ -1108,14 +1201,6 @@ button.review-section__head:hover .disclosure-chevron {
 .sidebar-complete__sub {
   font-size: 11px;
   color: var(--gray-a10);
-}
-
-/* ── Layout toggle ─────────────────────────────────────────────────────────────*/
-
-.view-toggle__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
 }
 
 /* ── Diff panel ────────────────────────────────────────────────────────────────*/
@@ -1284,6 +1369,8 @@ button.review-section__head:hover .disclosure-chevron {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  /* Reserve the scrollbar track so it can't reflow the diff as it appears. */
+  scrollbar-gutter: stable;
   font-family: var(--code-font-family);
   font-size: 13px;
   line-height: 20px;
@@ -1302,10 +1389,12 @@ button.review-section__head:hover .disclosure-chevron {
   min-width: 100%;
 }
 
-/* One virtualized row, translated to its place; as wide as its content. */
+/* One virtualized row, placed at its offset; as wide as its content. `top` is set
+   inline per row (the virtualizer offset) rather than `transform`: a transformed
+   ancestor would become the containing block for the sticky gutter and break its
+   horizontal-scroll pinning. */
 .diff-row {
   position: absolute;
-  top: 0;
   left: 0;
   width: max-content;
   min-width: 100%;
@@ -1315,22 +1404,50 @@ button.review-section__head:hover .disclosure-chevron {
 .diff-hunk-head {
   height: var(--diff-row-height, 20px);
   line-height: var(--diff-row-height, 20px);
-  padding: 0 12px;
   color: var(--accent-a11);
   /* One seam, per the design system: the --gtg-raised value-step alone lifts the
    * band off the gray-2 diff surface — no hairline on top of the tint. */
   background: var(--gtg-raised);
   white-space: pre;
   user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The hunk range, pinned to the left edge so it stays put as the code scrolls
+ * sideways. The band itself spans the full row, so no background is needed here. */
+.diff-hunk-head__text {
+  position: sticky;
+  left: 0;
+  display: inline-block;
+  padding: 0 12px;
 }
 
 .diff-line {
-  display: grid;
-  /* Two number gutters size to the file's widest line number (set inline as
-   * --diff-no-width), then the sign, then the content. */
-  grid-template-columns: var(--diff-no-width, 4ch) var(--diff-no-width, 4ch) 2ch 1fr;
+  display: flex;
   height: var(--diff-row-height, 20px);
   line-height: var(--diff-row-height, 20px);
+}
+
+/* The line-number gutter + sign as one unit, pinned to the left edge so it stays
+ * read-able while the code scrolls horizontally under it (sticky against the
+ * .diff-scroll viewport). Its own opaque surface hides the code passing beneath;
+ * the two number columns size to the file's widest line number (--diff-no-width),
+ * then the sign. */
+.diff-line__gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: var(--diff-no-width, 4ch) var(--diff-no-width, 4ch) 2ch;
+  /* Inset the numbers past the 2px add/delete rail (drawn on the gutter's left
+   * edge) so it gets its own lane and never clips the leftmost line-number digit. */
+  padding-left: 4px;
+  background: var(--gtg-surface);
+  /* Selecting code must never pick up the line numbers or sign. The -webkit-
+   * prefix is required for WebKitGTK; it inherits to the cells below. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .diff-line__no {
@@ -1350,6 +1467,7 @@ button.review-section__head:hover .disclosure-chevron {
 }
 
 .diff-line__content {
+  flex: 1 0 auto;
   white-space: pre;
   font: inherit;
   padding-right: 12px;
@@ -1365,9 +1483,16 @@ button.review-section__head:hover .disclosure-chevron {
 }
 
 /* Add / delete: a faint line wash + a quiet same-hue gutter rail and sign. The
- * bright fill is reserved for changed tokens (intra-line word diff, a later pass). */
+ * bright fill is reserved for changed tokens (intra-line word diff, a later pass).
+ * The pinned gutter carries the same wash over an opaque base (so the scrolling
+ * code can't bleed through it) and the same-hue left rail, kept attached to the
+ * gutter rather than scrolling off with the code. */
 .diff-line--add {
   background: var(--green-a3);
+}
+
+.diff-line--add .diff-line__gutter {
+  background: linear-gradient(var(--green-a3), var(--green-a3)), var(--gtg-surface);
   box-shadow: inset 2px 0 var(--green-a7);
 }
 
@@ -1378,6 +1503,10 @@ button.review-section__head:hover .disclosure-chevron {
 
 .diff-line--delete {
   background: var(--red-a3);
+}
+
+.diff-line--delete .diff-line__gutter {
+  background: linear-gradient(var(--red-a3), var(--red-a3)), var(--gtg-surface);
   box-shadow: inset 2px 0 var(--red-a7);
 }
 

@@ -1,35 +1,30 @@
-import { SegmentedControl } from '@radix-ui/themes'
+import { IconButton, Tooltip } from '@radix-ui/themes'
 import { ListIcon, TreeIcon } from '../../components/icons'
-import { useViewStore, type ViewMode } from '../../stores/use-view-store'
+import { useViewStore } from '../../stores/use-view-store'
 
 /**
- * Toolbar control switching the review between the flat list and the tree
- * layout. Bound to {@link useViewStore} (global, persisted); the change applies
- * to both review sections at once.
+ * Toolbar toggle switching the review file layout between the flat list and the
+ * tree. A single ghost icon button carrying the icon of the layout it switches
+ * *to* (tree while listing, list while treeing); the change applies to both
+ * review sections at once (global, persisted via {@link useViewStore}).
  */
 export function ViewModeToggle() {
   const mode = useViewStore((s) => s.mode)
   const setMode = useViewStore((s) => s.setMode)
+  const toTree = mode === 'list'
+  const label = toTree ? 'Afficher en arbre' : 'Afficher en liste'
 
   return (
-    <SegmentedControl.Root
-      size="1"
-      value={mode}
-      onValueChange={(value) => setMode(value as ViewMode)}
-      aria-label="Disposition des fichiers"
-    >
-      <SegmentedControl.Item value="list">
-        <span className="view-toggle__item">
-          <ListIcon />
-          Liste
-        </span>
-      </SegmentedControl.Item>
-      <SegmentedControl.Item value="tree">
-        <span className="view-toggle__item">
-          <TreeIcon />
-          Arbre
-        </span>
-      </SegmentedControl.Item>
-    </SegmentedControl.Root>
+    <Tooltip content={label}>
+      <IconButton
+        variant="ghost"
+        color="gray"
+        size="1"
+        aria-label={label}
+        onClick={() => setMode(toTree ? 'tree' : 'list')}
+      >
+        {toTree ? <TreeIcon /> : <ListIcon />}
+      </IconButton>
+    </Tooltip>
   )
 }

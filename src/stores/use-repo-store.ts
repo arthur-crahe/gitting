@@ -7,7 +7,9 @@ import {
   type RepoStatus,
   readStatus,
   stageFile,
+  stageFiles,
   unstageFile,
+  unstageFiles,
 } from '../lib/git'
 import { useDiffStore } from './use-diff-store'
 import { useStatsStore } from './use-stats-store'
@@ -49,6 +51,14 @@ export interface RepoStoreState {
   /** Un-validate `file`: unstage it, refresh, and re-align the diff selection.
    * Resolves like {@link RepoStoreState.stage}. */
   unstage: (file: string) => Promise<boolean>
+  /**
+   * Validate `files` in one batch ("tout valider"): stage them all, refresh once,
+   * and re-align the diff. Resolves like {@link RepoStoreState.stage}.
+   */
+  stageMany: (files: readonly string[]) => Promise<boolean>
+  /** Un-validate `files` in one batch ("tout dévalider"). Resolves like
+   * {@link RepoStoreState.stageMany}. */
+  unstageMany: (files: readonly string[]) => Promise<boolean>
 }
 
 /**
@@ -123,6 +133,8 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
 
   stage: (file) => mutateIndex(get, set, stageFile, file, true),
   unstage: (file) => mutateIndex(get, set, unstageFile, file, false),
+  stageMany: (files) => mutateManyIndex(get, set, stageFiles, files, true),
+  unstageMany: (files) => mutateManyIndex(get, set, unstageFiles, files, false),
 }))
 
 /**
@@ -163,6 +175,54 @@ async function mutateIndex(
   } finally {
     const next = new Set(get().pendingPaths)
     next.delete(file)
+    set({ pendingPaths: next })
+  }
+}
+
+/**
+ * Runs a single batched index write (`stageFiles`/`unstageFiles`) over `files`,
+ * then refreshes once — so validating a whole section is one `git` call and one
+ * re-read, not one per file. Files already mid-write are skipped (so it composes
+ * with in-flight single writes); the rest are marked pending for the duration so
+ * their rows show progress and a repeat click is ignored. Mirrors {@link
+ * mutateIndex} for the single-file case.
+ */
+async function mutateManyIndex(
+  get: () => RepoStoreState,
+  set: (partial: Partial<RepoStoreState>) => void,
+  write: (root: string, files: readonly string[]) => Promise<void>,
+  files: readonly string[],
+  validated: boolean,
+): Promise<boolean> {
+  const { info, pendingPaths } = get()
+  if (!info) {
+    return false
+  }
+  // Drop files with a write already in flight; nothing left means it's underway.
+  const target = files.filter((file) => !pendingPaths.has(file))
+  if (target.length === 0) {
+    return files.length > 0
+  }
+  const pending = new Set(pendingPaths)
+  for (const file of target) {
+    pending.add(file)
+  }
+  set({ pendingPaths: pending })
+  try {
+    await write(info.root, target)
+    if (validated) {
+      set({ reviewedHere: true })
+    }
+    await get().refresh()
+    return true
+  } catch (error) {
+    set({ error: toMessage(error) })
+    return false
+  } finally {
+    const next = new Set(get().pendingPaths)
+    for (const file of target) {
+      next.delete(file)
+    }
     set({ pendingPaths: next })
   }
 }

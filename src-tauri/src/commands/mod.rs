@@ -51,6 +51,18 @@ pub async fn unstage_file(path: String, file: String) -> Result<(), GitError> {
     run(move || git::unstage_file(&PathBuf::from(path), &file)).await
 }
 
+/// Validates many files at once: stages all of `files` ("tout valider").
+#[tauri::command]
+pub async fn stage_files(path: String, files: Vec<String>) -> Result<(), GitError> {
+    run(move || git::stage_files(&PathBuf::from(path), &files)).await
+}
+
+/// Un-validates many files at once: unstages all of `files` ("tout dévalider").
+#[tauri::command]
+pub async fn unstage_files(path: String, files: Vec<String>) -> Result<(), GitError> {
+    run(move || git::unstage_files(&PathBuf::from(path), &files)).await
+}
+
 /// Runs a blocking git operation on the blocking pool, flattening a join panic
 /// into a [`GitError`].
 async fn run<T, F>(op: F) -> Result<T, GitError>
