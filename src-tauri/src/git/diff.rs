@@ -204,11 +204,12 @@ fn unstaged_file(
                 return Ok(None);
             }
             let path = path_string(&entry.rela_path);
-            // Only a regular file has a blob the diff pipeline can open. The
-            // dirwalk collapses an untracked directory into a single entry; that —
-            // like a nested repository, a symlink, or a non-regular file (FIFO,
-            // socket) — has no readable blob, so reading it as text would fail and
-            // blank the whole section. List it without hunks instead.
+            // Only a regular file has a blob the diff pipeline can open. The walk
+            // recurses into untracked directories (so each contained file arrives
+            // here as its own `File` entry), but a nested repository, a symlink, or
+            // a non-regular file (FIFO, socket) still surfaces as one non-`File`
+            // entry with no readable blob: reading it as text would fail and blank
+            // the whole section, so list it without hunks instead.
             if !matches!(entry.disk_kind, Some(gix::dir::entry::Kind::File)) {
                 return Ok(Some(notice(path, ChangeKind::Untracked)));
             }
@@ -581,26 +582,31 @@ mod tests {
     }
 
     #[test]
-    fn untracked_directory_is_listed_without_erroring_the_section() {
+    fn untracked_directory_lists_each_file_with_its_additions() {
         let repo = TempRepo::init();
         repo.write("a.txt", "x\n");
         repo.stage("a.txt");
         repo.commit("seed");
 
         // A reviewable worktree edit alongside a brand-new untracked directory. The
-        // dirwalk collapses the directory into a single entry that has no blob to
-        // open — reading it as a file must not fail the whole unstaged diff.
+        // walk recurses into the directory, so each contained file is reviewable on
+        // its own — a real additions-only diff under its full path, not a single
+        // opaque folder row.
         repo.write("a.txt", "y\n");
-        repo.write("newdir/nested.txt", "hello\n");
+        repo.write("newdir/nested.txt", "hello\nworld\n");
 
         let files = diff_unstaged(repo.path()).expect("an untracked dir must not error the diff");
 
-        // The collapsed directory entry is listed verbatim (gix emits no trailing
-        // slash) and carries no hunks.
-        let dir = files.iter().find(|f| f.path == "newdir").expect("untracked directory listed");
-        assert!(matches!(dir.change_kind, ChangeKind::Untracked));
-        assert!(dir.hunks.is_empty(), "no hunks for a directory entry");
-        assert!(!dir.is_binary);
+        // The directory itself is never listed; its file is, with its full path.
+        assert!(!files.iter().any(|f| f.path == "newdir"), "the bare folder must not be listed");
+        let nested =
+            files.iter().find(|f| f.path == "newdir/nested.txt").expect("nested file listed");
+        assert!(matches!(nested.change_kind, ChangeKind::Untracked));
+        use DiffLineKind::Add;
+        assert_eq!(
+            flat(nested),
+            vec![(Add, None, Some(1), "hello"), (Add, None, Some(2), "world")],
+        );
 
         // The sibling file still carries its real diff — the section was not abandoned.
         let edited = files.iter().find(|f| f.path == "a.txt").expect("a.txt listed");

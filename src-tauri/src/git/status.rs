@@ -55,9 +55,9 @@ pub fn read_status(path: &Path) -> Result<RepoStatus, GitError> {
             status::Item::IndexWorktree(index_worktree::Item::DirectoryContents {
                 entry, ..
             }) => {
-                // Classify on the entry's own status: the default dirwalk drops
-                // collapsed children, so `collapsed_directory_status` is always
-                // `None` here and `entry.status` is the only reliable signal.
+                // One entry per untracked file (the walk emits `Files`, never a
+                // collapsed directory), classified on its own status — the path is
+                // the full `newdir/inner.txt`, which the sidebar nests on its own.
                 if matches!(entry.status, gix::dir::entry::Status::Untracked) {
                     unstaged.push(StatusEntry {
                         path: path_string(&entry.rela_path),
@@ -88,6 +88,13 @@ pub fn read_status(path: &Path) -> Result<RepoStatus, GitError> {
 /// rename collapses into a single `Renamed` row instead of a deletion plus an
 /// untracked addition. Each item is a [`Result`]; a mid-iteration failure
 /// surfaces as a [`GitError::Status`] rather than silently truncating the walk.
+///
+/// [`UntrackedFiles::Files`](gix::status::UntrackedFiles::Files) recurses the
+/// dirwalk into brand-new directories (gix defaults to `Collapsed`, which would
+/// yield one entry for the whole directory) so every untracked **file** surfaces
+/// as its own `newdir/inner.txt` entry — each reviewable on its own, instead of a
+/// single opaque `newdir` row. A nested repository, symlink or non-regular entry
+/// is still emitted as one non-`File` entry and listed without hunks downstream.
 pub(super) fn status_iter(
     repo: &gix::Repository,
 ) -> Result<impl Iterator<Item = Result<status::Item, GitError>> + '_, GitError> {
@@ -95,6 +102,7 @@ pub(super) fn status_iter(
         .status(gix::progress::Discard)
         .map_err(|e| GitError::Status(e.to_string()))?
         .index_worktree_rewrites(Some(gix::diff::Rewrites::default()))
+        .untracked_files(gix::status::UntrackedFiles::Files)
         .into_iter(None::<BString>)
         .map_err(|e| GitError::Status(e.to_string()))?;
     Ok(iter.map(|item| item.map_err(|e| GitError::Status(e.to_string()))))
@@ -156,5 +164,31 @@ mod tests {
         assert_eq!(status.staged.len(), 1);
         assert_eq!(status.staged[0].path, "a.txt");
         assert!(matches!(status.staged[0].kind, ChangeKind::Modified));
+    }
+
+    #[test]
+    fn brand_new_directory_lists_each_file_not_the_folder() {
+        let repo = TempRepo::init();
+        repo.write("seed.txt", "seed\n");
+        repo.stage("seed.txt");
+        repo.commit("seed");
+
+        // A brand-new untracked directory: the walk must recurse into it and list
+        // each contained file on its own (sorted by path), never the bare folder.
+        repo.write("newdir/a.txt", "one\n");
+        repo.write("newdir/sub/b.txt", "two\n");
+
+        let status = read_status(repo.path()).expect("read status");
+        let untracked: Vec<&str> = status
+            .unstaged
+            .iter()
+            .filter(|e| matches!(e.kind, ChangeKind::Untracked))
+            .map(|e| e.path.as_str())
+            .collect();
+        assert_eq!(untracked, vec!["newdir/a.txt", "newdir/sub/b.txt"]);
+        assert!(
+            !status.unstaged.iter().any(|e| e.path == "newdir"),
+            "the directory itself must not be listed"
+        );
     }
 }
