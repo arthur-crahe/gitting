@@ -55,13 +55,15 @@ describe('SidebarResizer', () => {
     render(<Harness />)
     const handle = screen.getByRole('separator')
 
+    // The gesture starts on the handle but is driven by window-level listeners,
+    // so the cursor can leave the handle without dropping the drag (WebView2).
     fireEvent.pointerDown(handle, { button: 0, clientX: 100, pointerId: 1 })
-    fireEvent.pointerMove(handle, { clientX: 160, pointerId: 1 })
+    fireEvent.pointerMove(window, { clientX: 160, pointerId: 1 })
     // Mid-drag: the variable tracks the drag, the store is untouched.
     expect(sidebarWidthVar()).toBe(`${DEFAULT_WIDTH + 60}px`)
     expect(useSidebarStore.getState().width).toBe(DEFAULT_WIDTH)
 
-    fireEvent.pointerUp(handle, { clientX: 160, pointerId: 1 })
+    fireEvent.pointerUp(window, { clientX: 160, pointerId: 1 })
     expect(useSidebarStore.getState().width).toBe(DEFAULT_WIDTH + 60)
   })
 
@@ -69,8 +71,8 @@ describe('SidebarResizer', () => {
     render(<Harness />)
     const handle = screen.getByRole('separator')
     fireEvent.pointerDown(handle, { button: 0, clientX: 0, pointerId: 1 })
-    fireEvent.pointerMove(handle, { clientX: 1000, pointerId: 1 })
-    fireEvent.pointerUp(handle, { clientX: 1000, pointerId: 1 })
+    fireEvent.pointerMove(window, { clientX: 1000, pointerId: 1 })
+    fireEvent.pointerUp(window, { clientX: 1000, pointerId: 1 })
     expect(useSidebarStore.getState().width).toBe(MAX_WIDTH)
   })
 
@@ -88,10 +90,10 @@ describe('SidebarResizer', () => {
 
     fireEvent.pointerDown(handle, { button: 0, clientX: 100, pointerId: 1 })
     expect(split).toHaveClass('is-resizing')
-    fireEvent.pointerMove(handle, { clientX: 140, pointerId: 1 })
-    fireEvent.pointerCancel(handle, { clientX: 140, pointerId: 1 })
+    fireEvent.pointerMove(window, { clientX: 140, pointerId: 1 })
+    fireEvent.pointerCancel(window, { clientX: 140, pointerId: 1 })
 
-    // A cancel shares endDrag: width still commits and the class is removed.
+    // A cancel ends the same gesture: width still commits and the class is removed.
     expect(useSidebarStore.getState().width).toBe(DEFAULT_WIDTH + 40)
     expect(split).not.toHaveClass('is-resizing')
   })

@@ -148,6 +148,14 @@ jsdom has the `PointerEvent` constructor (so `fireEvent.pointer*` dispatches) bu
 - **Tests**: the three Vitest suites pass; the spy proves a single commit per gesture and per keystroke; the Biome / strict-TS gate passes.
 - **Manual (`pnpm tauri dev`)** on both target WebViews: mouse drag within `[240, 560]`; persistence across restart; `Tab` to the handle then arrows/Home/End; double-click → reset to 320; **the diff does not flicker or re-render** during drag; `:focus-visible` and hover/active render correctly under the real Radix theme on light **and** dark; `ViewModeToggle` appears pinned in the sidebar header (does not scroll) and is gone from the toolbar.
 
+## Update (2026-06-29) — WebView2 drag reliability
+
+The decision (Option C — owned Pointer-Events splitter) stands; only the **event-target mechanism** is revised. The original drag depended on `setPointerCapture(pointerId)` on the handle to keep `pointermove` flowing once the cursor left the few-pixel strip. That holds on WebKitGTK (Linux) but **not on WebView2 (Windows)**: WebView2 does not reliably retain mouse pointer capture, so the captured `pointermove` stopped firing the moment the cursor left the handle (and the `.is-resizing .review-split__diff { pointer-events: none }` guard routes moves *away from*, not back to, the handle). Net effect: the sidebar did not resize at all on Windows.
+
+**Revised mechanic.** On `pointerdown` the gesture now attaches `pointermove` / `pointerup` / `pointercancel` / `blur` listeners to **`window`** (removed on end), instead of relying on pointer capture on the handle. Window listeners receive every move regardless of the element under the cursor and regardless of `pointer-events: none` on the diff — the pattern every production splitter uses, reliable on both WebViews. `setPointerCapture`/`releasePointerCapture` are dropped (no longer load-bearing); the `--sidebar-width` direct-write perf path, the once-per-gesture commit, the ARIA/keyboard model, and the `.is-resizing` guards are unchanged. An unmount mid-drag settles the gesture via a ref so no listener leaks. The Vitest drag tests now dispatch move/up/cancel on `window` (matching the real target).
+
+**Companion config fix.** `app.windows[].dragDropEnabled` is set to `false` in `tauri.conf.json`. Its Tauri 2 default is `true`, which installs a WebView2 OS-level (OLE) drag-drop handler that can hijack click-drag gestures on Windows. Gitting uses no HTML5 drag-and-drop or file-drop (repos open via the dialog plugin), so disabling it is risk-free and removes a documented class of Windows-only drag interference. Re-enable it only if a future "drop a folder to open it" feature is added.
+
 ## References
 
 - WAI-ARIA APG — Window Splitter: <https://www.w3.org/WAI/ARIA/apg/patterns/windowsplitter/>

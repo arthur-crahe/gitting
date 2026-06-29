@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type PointerEvent, type RefObject, useRef } from 'react'
+import { type KeyboardEvent, type PointerEvent, type RefObject, useEffect, useRef } from 'react'
 import { useSidebarStore } from '../../stores/use-sidebar-store'
 import { MAX_WIDTH, MIN_WIDTH, nextWidthForKey, widthFromDrag } from './resize-utils'
 
@@ -7,23 +7,22 @@ function splitOf(handle: Element): Element | null {
   return handle.closest('.review-split')
 }
 
-/** Live drag state, kept in a ref so pointer moves never re-render React. */
-interface Drag {
-  /** Pointer x at pointer-down. */
-  readonly startX: number
-  /** Sidebar width at pointer-down. */
-  readonly startWidth: number
-  /** Latest clamped width during the drag, committed on pointer-up. */
-  latest: number
-}
-
 /**
  * The draggable separator between the file list and the diff (ADR 0003). A
  * WAI-ARIA Window Splitter we own: `role="separator"` with a live value model and
- * keyboard resize. During a pointer drag it mutates the `--sidebar-width` custom
- * property on `sidebarRef` directly — zero React re-render per frame — and commits
- * the width to {@link useSidebarStore} once on pointer-up; the keyboard path
- * commits each discrete step. Double-click resets to the default width.
+ * keyboard resize.
+ *
+ * The pointer drag is driven by listeners attached to `window` for the duration
+ * of the gesture — not by `setPointerCapture` on the handle. WebView2 (Windows)
+ * does not reliably keep mouse pointer capture, so a handle-scoped `pointermove`
+ * stops firing the instant the cursor leaves the few-pixel handle; window
+ * listeners receive every move regardless of the element under the cursor (and
+ * regardless of the diff pane's `pointer-events: none` during the drag), so the
+ * splitter behaves identically on WebKitGTK and WebView2. Each move mutates the
+ * `--sidebar-width` custom property on `sidebarRef` directly — zero React
+ * re-render per frame — and the width is committed to {@link useSidebarStore}
+ * once when the gesture ends; the keyboard path commits each discrete step.
+ * Double-click resets to the default width.
  *
  * @param sidebarRef the list pane element whose `--sidebar-width` drives its
  *   `flex-basis`; must carry `id="review-sidebar"` (referenced by `aria-controls`).
@@ -32,46 +31,50 @@ export function SidebarResizer({ sidebarRef }: { sidebarRef: RefObject<HTMLEleme
   const width = useSidebarStore((s) => s.width)
   const setWidth = useSidebarStore((s) => s.setWidth)
   const reset = useSidebarStore((s) => s.reset)
-  const drag = useRef<Drag | null>(null)
+  // Tears down the in-flight gesture's window listeners (committing the latest
+  // width); null when no drag is active. Also used to settle a drag that is
+  // still running when the component unmounts.
+  const endDrag = useRef<(() => void) | null>(null)
 
   const applyWidth = (px: number) => {
     sidebarRef.current?.style.setProperty('--sidebar-width', `${px}px`)
   }
 
+  // A drag still in flight when the component unmounts must not leave its
+  // listeners attached to window.
+  useEffect(() => () => endDrag.current?.(), [])
+
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) {
+    // Ignore non-primary buttons and a second press while a drag is in flight.
+    if (event.button !== 0 || endDrag.current) {
       return
     }
+    const split = splitOf(event.currentTarget)
+    const startX = event.clientX
     const startWidth = useSidebarStore.getState().width
-    drag.current = { startX: event.clientX, startWidth, latest: startWidth }
+    let latest = startWidth
     // Synchronous, no setState: arm the resize cursor / text-select guard.
-    splitOf(event.currentTarget)?.classList.add('is-resizing')
-    event.currentTarget.setPointerCapture?.(event.pointerId)
-  }
+    split?.classList.add('is-resizing')
 
-  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const state = drag.current
-    if (!state) {
-      return
+    const onMove = (move: globalThis.PointerEvent) => {
+      latest = widthFromDrag(startWidth, startX, move.clientX)
+      applyWidth(latest)
     }
-    const next = widthFromDrag(state.startWidth, state.startX, event.clientX)
-    state.latest = next
-    applyWidth(next)
-  }
-
-  const endDrag = (event: PointerEvent<HTMLDivElement>) => {
-    const state = drag.current
-    if (!state) {
-      return
+    const end = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      window.removeEventListener('blur', end)
+      split?.classList.remove('is-resizing')
+      endDrag.current = null
+      setWidth(latest)
     }
-    drag.current = null
-    splitOf(event.currentTarget)?.classList.remove('is-resizing')
-    // Commit before releasing capture so a release on an already-inactive
-    // pointer (e.g. a cancelled gesture) can never skip the store write.
-    setWidth(state.latest)
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
+    endDrag.current = end
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+    // A focus loss (e.g. the OS taking over) ends the gesture so it can't stick.
+    window.addEventListener('blur', end)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -98,9 +101,6 @@ export function SidebarResizer({ sidebarRef }: { sidebarRef: RefObject<HTMLEleme
       aria-valuemax={MAX_WIDTH}
       aria-valuetext={`${rounded} pixels`}
       onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
       onKeyDown={onKeyDown}
       onDoubleClick={reset}
     />

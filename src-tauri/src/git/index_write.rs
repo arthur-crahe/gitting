@@ -6,7 +6,7 @@
 //! can be swapped for a native `gix` implementation once that lands, without
 //! touching the commands or the rest of the git layer.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::ErrorKind;
 use std::path::Path;
 use std::process::Command;
@@ -59,6 +59,29 @@ trait IndexWriter {
 /// are split into several calls so the command line stays well under the platform
 /// limit (Windows caps it near 32 KiB).
 const PATHS_PER_CALL: usize = 100;
+
+/// Builds the `git` command, suppressing the console window that would otherwise
+/// flash for every invocation on Windows. A release build runs in the GUI
+/// subsystem (`windows_subsystem = "windows"`) and owns no console, so spawning
+/// the console application `git` makes Windows allocate — and briefly show — a
+/// fresh one. `CREATE_NO_WINDOW` runs it windowless; `output()` still captures
+/// stdout/stderr, as the piped std handles are independent of this flag.
+#[cfg(windows)]
+fn git_command(program: &OsStr) -> Command {
+    use std::os::windows::process::CommandExt;
+    /// `CREATE_NO_WINDOW` — run the console application with no console window.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let mut command = Command::new(program);
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
+/// Builds the `git` command. Non-Windows targets have no console-window to
+/// suppress, so this is a plain [`Command`].
+#[cfg(not(windows))]
+fn git_command(program: &OsStr) -> Command {
+    Command::new(program)
+}
 
 /// Drives index writes through the `git` CLI.
 struct GitCli {
@@ -117,7 +140,7 @@ impl GitCli {
     /// Runs `git -C <root> <args…>`, mapping a missing binary, a spawn failure
     /// or a non-zero exit to a [`GitError::Index`] carrying a usable message.
     fn exec(&self, root: &Path, args: &[&str]) -> Result<(), GitError> {
-        let output = Command::new(&self.program).arg("-C").arg(root).args(args).output();
+        let output = git_command(&self.program).arg("-C").arg(root).args(args).output();
         let output = match output {
             Ok(output) => output,
             // The only place the app needs an installed `git`; say so plainly.
