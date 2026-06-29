@@ -1,0 +1,9 @@
+# Store and check out text files with LF on every platform, overriding each
+# machine's core.autocrlf. Windows and Linux then behave identically and
+# LF-expecting tooling (Biome) passes the same everywhere.
+* text=auto eol=lf
+
+# Binary assets — never normalize or diff as text.
+*.png  binary
+*.ico  binary
+*.icns binary
