@@ -24,6 +24,7 @@ Section 1 empty ⇒ everything has been reviewed.
 
 ```
 CLAUDE.md            this file
+ROADMAP.md           single source of truth for upcoming features (priorities P0/P1/P2 + reserve)
 package.json         frontend manifest (pnpm)
 pnpm-workspace.yaml  pnpm settings + build-script allowlist
 tsconfig.json        strict TS for the app (src/)
