@@ -59,14 +59,16 @@ For **each confirmed finding**, re-verify it is real against the live code, then
 
 Independently of the scope, sweep the **whole repo** for slop: comments that merely restate the code, filler/AI-tic prose, commented-out or dead code/types/exports/CSS, stray or duplicate `.md`/scaffolding files, debug leftovers, emoji. Fan out per directory if it helps. Flag ONLY genuine slop — valuable rationale comments stay. Remove what you find.
 
-## 4 — Seamless integration (your fixes **and** pre-existing patches)
+## 4 — Seamless integration (repo-wide: your fixes, recent patches, and pre-existing scars)
 
-Make the reviewed code read **as if it had always been written correctly from the start**, with no trace of *when* or *how* anything was patched. This covers **two** sources:
+Make the code read **as if it had always been written correctly from the start**, with no trace of *when* or *how* anything was patched. This is **not bounded by the review scope** — it is a **whole-repo** concern, held to the **same** rewrite standard everywhere, applied across four concentric circles (the widest one governs; the inner ones only mark where patch-scars are most likely and must be hunted hardest):
 
 1. **The fixes you applied in Phase 2** — fold them in natively.
-2. **Fixes/patches already present in the code under review** — the code picked up at the start of the review may itself carry the scars of earlier corrections (by anyone, at any time). Detect and smooth those out **too**; they are in scope even though you did not write them.
+2. **Everything changed since the last review** — establish the baseline by inspecting git history for the most recent prior review pass (e.g. a commit referencing a review/`relire`, or other evidence of a review checkpoint). If you cannot identify one with confidence, fall back to the **last release** (`app-v*` tag, else the latest `chore(release)` commit). Re-examine every change since that baseline for patch-scars, not just the current scope.
+3. **The review scope (CR perimeter)** — the diff under review.
+4. **The whole repository** — every file, held to the **same** rewrite exigence as the CR scope, not a lighter touch.
 
-In both cases, remove every tell of after-the-fact patching: comments alluding to a "fix"/"bug"/history or to what the code "used to" / "no longer" / "now" does; workaround / rustine markers; defensive bolt-ons grafted *beside* the original instead of folded *into* it; and shapes that betray a patch rather than a design. Rewrite / rename / reshape into the structure an original-correct implementation would have had — while preserving behaviour (the gate must stay green). The end state is a **uniform** codebase where nothing reads as "added later."
+Across all four, remove every tell of after-the-fact patching: comments alluding to a "fix"/"bug"/history or to what the code "used to" / "no longer" / "now" does; workaround / rustine markers; defensive bolt-ons grafted *beside* the original instead of folded *into* it; and shapes that betray a patch rather than a design. Rewrite / rename / reshape into the structure an original-correct implementation would have had — while preserving behaviour (the gate must stay green). As in Phase 3, **valuable WHY-rationale comments stay** — only the patch/history tells go. The end state is a **uniform** codebase where nothing, anywhere, reads as "added later."
 
 ---
 
