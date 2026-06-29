@@ -1,6 +1,6 @@
 [package]
 name = "gitting"
-version = "0.5.0"
+version = "0.6.0"
 description = "Desktop app for reviewing local git changes"
 edition = "2021"
 # Toolchain: latest stable Rust (>= 1.85 for gix) — see ../rust-toolchain.toml.

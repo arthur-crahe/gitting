@@ -4,6 +4,15 @@ Notes de version de Gitting, de la plus récente à la plus ancienne, à destina
 
 <!-- release:anchor — /release inserts the new version section directly below this line -->
 
+## [0.6.0] - 2026-06-29
+
+### Nouveautés
+- Validation en lot : un bouton « Tout valider » / « Tout dévalider » par section traite d'un coup tous les fichiers affichés, en tenant compte du filtre actif.
+- Navigation au clavier fluidifiée : maintenir une flèche pour parcourir la liste reste réactif, même sur de gros diffs.
+- Numéros de ligne épinglés : la colonne des numéros et la plage du hunk restent visibles lors du défilement horizontal du code.
+- Fichiers non suivis détaillés : un nouveau dossier est présenté fichier par fichier — chacun relisible séparément avec son propre diff — au lieu d'une seule ligne de dossier opaque.
+- Défilement à la molette plus fluide sous Linux.
+
 ## [0.5.0] - 2026-06-20
 
 ### Nouveautés
