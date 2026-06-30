@@ -10,13 +10,15 @@ allowed-tools: Read, Edit, Bash(git status:*), Bash(git rev-parse:*), Bash(git f
 Cut a full release for version/bump: **$1**
 
 ## Current state
-- Branch: !`git rev-parse --abbrev-ref HEAD`
-- Working tree (empty = clean): !`git status --short`
-- Existing release tags: !`git tag --list 'app-v*' --sort=-v:refname`
+- Branch: !`git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "(no git on this shell's PATH — verified in step 1)"`
+- Working tree (empty = clean): !`git status --short 2>/dev/null || echo "(no git on this shell's PATH — verified in step 1)"`
+- Existing release tags: !`git tag --list 'app-v*' --sort=-v:refname 2>/dev/null || echo "(no git on this shell's PATH — read with git log in step 5)"`
 
 ## Procedure
 
 Do these in order. **Stop and report immediately if any check fails — never push a half-finished release.**
+
+> Shell note: this preamble and the commands below assume `git` and `pnpm` are on the shell's PATH. On a host where the default tool shell lacks them (e.g. a Windows bash that inherited a Windows-format PATH), run the same commands through the platform shell that does have them — PowerShell on Windows — rather than aborting.
 
 1. **Preconditions.** Abort unless all hold:
    - current branch is `main`;
