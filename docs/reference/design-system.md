@@ -184,8 +184,9 @@ bg, swaps the validate slide for an instant color flash.
   normal-case (never ALL-CAPS). Rows are **condensed ~22px** (VSCode-like): a colored
   **file-type icon** on the left (`@react-symbols/icons`, `file-type-icon.tsx`), the **name
   in Geist sans** (13/500) + muted left-truncated directory, and a trailing cluster of the
-  **change magnitude** `+N −N` (`--green-11`/`--red-11`, mono `tnum`, from the gix diffs —
-  `lib/diff-stats.ts` + `use-stats-store`) then the **git status letter** (A/M/D/R/T/U/!,
+  **change magnitude** `+N −N` (`--green-11`/`--red-11`, mono `tnum`, derived from the gix
+  diffs — `lib/diff-stats.ts` over `use-diff-store`'s loaded sections) then the **git status
+  letter** (A/M/D/R/T/U/!,
   `status-glyph.tsx`, kind colour). Hover `--gray-a3`, selected `--accent-a3` (no
   left-stripe), keyboard focus a `--accent-8` inset outline (keyboard-only). The validate
   action overlays the trailing cluster on hover/selection/while pending (it fades, no

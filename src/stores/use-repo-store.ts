@@ -12,7 +12,6 @@ import {
   unstageFiles,
 } from '../lib/git'
 import { useDiffStore } from './use-diff-store'
-import { useStatsStore } from './use-stats-store'
 
 /** Lifecycle of the opened repository, surfaced to the UI. */
 export type RepoPhase = 'empty' | 'loading' | 'ready' | 'error'
@@ -64,8 +63,8 @@ export interface RepoStoreState {
 /**
  * Monotonic request tokens, one per action: each of {@link RepoStoreState.open}
  * and {@link RepoStoreState.refresh} commits only while still the latest of its
- * own kind in flight, so a slow response can't clobber a newer one — and a
- * refresh never cancels an in-flight open (they no longer share a counter).
+ * own kind in flight, so a slow response can't clobber a newer one. Separate
+ * counters keep the two independent — a refresh can never cancel an in-flight open.
  */
 let openToken = 0
 let refreshToken = 0
@@ -92,10 +91,11 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
       const [info, status] = await Promise.all([openRepo(path), readStatus(path)])
       if (token !== openToken) return
       // A different repository is now under review: drop the previous one's
-      // selection, diff cache and change counts so nothing leaks across the switch.
+      // selection and diff/count cache so nothing leaks across the switch.
       useDiffStore.getState().reset()
-      useStatsStore.getState().reset()
       set({ phase: 'ready', info, status, pendingPaths: new Set(), reviewedHere: false })
+      // Load both sections' diffs once — the panel and the sidebar counts.
+      void useDiffStore.getState().load(info.root)
     } catch (error) {
       if (token !== openToken) return
       set({ phase: 'error', info: null, status: null, error: toMessage(error) })
@@ -131,63 +131,33 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
     }
   },
 
-  stage: (file) => mutateIndex(get, set, stageFile, file, true),
-  unstage: (file) => mutateIndex(get, set, unstageFile, file, false),
-  stageMany: (files) => mutateManyIndex(get, set, stageFiles, files, true),
-  unstageMany: (files) => mutateManyIndex(get, set, unstageFiles, files, false),
+  stage: (file) => mutateIndex(get, set, (root) => stageFile(root, file), [file], true),
+  unstage: (file) => mutateIndex(get, set, (root) => unstageFile(root, file), [file], false),
+  stageMany: (files) => mutateIndex(get, set, stageFiles, files, true),
+  unstageMany: (files) => mutateIndex(get, set, unstageFiles, files, false),
 }))
 
 /**
- * Runs an index write (`stage`/`unstage`) for `file`, then refreshes — which
- * re-aligns the selection so the panel follows the file across sections. The
- * file is marked pending for the duration so its row can disable/spin and a
- * second click is ignored; a failure surfaces inline without disturbing the repo.
- * A successful `validated` (stage) write arms {@link RepoStoreState.reviewedHere}
- * so the completion celebration only fires once work was burned down in-session.
+ * Runs an index write over `files` (one file or a whole section), then re-reads
+ * the status — which re-aligns the selection so the panel follows files across
+ * sections. The single- and bulk-validate paths share this one body: the caller
+ * supplies a write that targets the resolved paths (`stageFile` for one,
+ * `stageFiles` for a batch).
+ *
+ * Files already mid-write are skipped, so a bulk write composes with an in-flight
+ * single one; a duplicate with nothing left to do reports success without a `git`
+ * call. The targeted files are marked pending for the duration so their rows
+ * spin/disable and a repeat click is ignored. A validated (stage) write arms
+ * {@link RepoStoreState.reviewedHere} so the completion beat only fires once work
+ * was burned down in-session.
+ *
+ * The status is re-read even when a **multi-file** write fails: a batched write
+ * can apply some files before erroring (see `index_write.rs`), so the sidebar
+ * must reflect what actually landed rather than stay stale under the error
+ * banner. A single-file write is atomic — nothing is staged on failure — so it
+ * skips the redundant re-read and just surfaces the error.
  */
 async function mutateIndex(
-  get: () => RepoStoreState,
-  set: (partial: Partial<RepoStoreState>) => void,
-  write: (root: string, file: string) => Promise<void>,
-  file: string,
-  validated: boolean,
-): Promise<boolean> {
-  const { info, pendingPaths } = get()
-  if (!info) {
-    return false
-  }
-  // A write for this file is already in flight: ignore the duplicate, but report
-  // it as underway so a caller doesn't treat it as a failure.
-  if (pendingPaths.has(file)) {
-    return true
-  }
-  set({ pendingPaths: new Set(pendingPaths).add(file) })
-  try {
-    await write(info.root, file)
-    if (validated) {
-      set({ reviewedHere: true })
-    }
-    await get().refresh()
-    return true
-  } catch (error) {
-    set({ error: toMessage(error) })
-    return false
-  } finally {
-    const next = new Set(get().pendingPaths)
-    next.delete(file)
-    set({ pendingPaths: next })
-  }
-}
-
-/**
- * Runs a single batched index write (`stageFiles`/`unstageFiles`) over `files`,
- * then refreshes once — so validating a whole section is one `git` call and one
- * re-read, not one per file. Files already mid-write are skipped (so it composes
- * with in-flight single writes); the rest are marked pending for the duration so
- * their rows show progress and a repeat click is ignored. Mirrors {@link
- * mutateIndex} for the single-file case.
- */
-async function mutateManyIndex(
   get: () => RepoStoreState,
   set: (partial: Partial<RepoStoreState>) => void,
   write: (root: string, files: readonly string[]) => Promise<void>,
@@ -208,21 +178,30 @@ async function mutateManyIndex(
     pending.add(file)
   }
   set({ pendingPaths: pending })
+
+  let failure: string | null = null
   try {
     await write(info.root, target)
     if (validated) {
       set({ reviewedHere: true })
     }
+  } catch (error) {
+    failure = toMessage(error)
+  }
+  // Settle the pending marks regardless of outcome so the rows stop spinning.
+  const cleared = new Set(get().pendingPaths)
+  for (const file of target) {
+    cleared.delete(file)
+  }
+  set({ pendingPaths: cleared })
+
+  if (failure === null) {
     await get().refresh()
     return true
-  } catch (error) {
-    set({ error: toMessage(error) })
-    return false
-  } finally {
-    const next = new Set(get().pendingPaths)
-    for (const file of target) {
-      next.delete(file)
-    }
-    set({ pendingPaths: next })
   }
+  if (target.length > 1) {
+    await get().refresh()
+  }
+  set({ error: failure })
+  return false
 }

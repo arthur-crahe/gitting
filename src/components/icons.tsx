@@ -118,7 +118,7 @@ export function CheckAllIcon() {
 
 /** Curved back-arrow — un-validates (unstages) a file, sending it to review. The
  * glyph's bounding box is centred in the 16-unit viewBox so it sits vertically
- * centred in its button (the previous path was bottom-heavy and rendered low). */
+ * centred in its button. */
 export function UndoIcon() {
   return (
     <StrokeIcon size={14}>

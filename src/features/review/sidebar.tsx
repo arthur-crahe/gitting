@@ -8,7 +8,6 @@ import {
   useState,
 } from 'react'
 import { useRepoStore } from '../../stores/use-repo-store'
-import { useStatsStore } from '../../stores/use-stats-store'
 import { useViewStore } from '../../stores/use-view-store'
 import { CompletionBeat } from './completion-beat'
 import { RepoMenu } from './repo-menu'
@@ -32,7 +31,7 @@ function QueueEmpty({ stats }: { stats: ReviewStats }) {
 }
 
 /**
- * The review file list — the redesigned left pane. A header (instant filter +
+ * The review file list — the left pane. A header (instant filter +
  * list/tree toggle + repo menu) over a scroll area holding the two sections:
  * "À reviewer" (the active queue, on top, open by default, accent count badge)
  * and "Validé" (the archive, below, collapsed by default, recessed) — both
@@ -55,7 +54,6 @@ export function Sidebar({
   const root = useRepoStore((s) => s.info?.root ?? null)
   const reviewedHere = useRepoStore((s) => s.reviewedHere)
   const mode = useViewStore((s) => s.mode)
-  const loadStats = useStatsStore((s) => s.load)
   const actions = useRowActions()
 
   const [query, setQuery] = useState('')
@@ -97,15 +95,6 @@ export function Sidebar({
   useLayoutEffect(() => {
     restoreFocus()
   }, [status, restoreFocus])
-
-  // Per-file change counts (the +N −N magnitude) track the status: reload on a
-  // working-tree change or a repository switch.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: status is the reload trigger; the load reads the current root.
-  useEffect(() => {
-    if (root) {
-      void loadStats(root)
-    }
-  }, [root, status, loadStats])
 
   if (!status) {
     return null

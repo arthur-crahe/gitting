@@ -5,17 +5,23 @@ vi.mock('../lib/git', () => ({
   readStatus: vi.fn(),
   stageFile: vi.fn(),
   unstageFile: vi.fn(),
+  stageFiles: vi.fn(),
+  unstageFiles: vi.fn(),
   diffUnstaged: vi.fn(),
   diffStaged: vi.fn(),
 }))
 
 import {
+  diffStaged,
+  diffUnstaged,
   openRepo,
   type RepoInfo,
   type RepoStatus,
   readStatus,
   stageFile,
+  stageFiles,
   unstageFile,
+  unstageFiles,
 } from '../lib/git'
 import { useDiffStore } from './use-diff-store'
 import { useRepoStore } from './use-repo-store'
@@ -24,6 +30,10 @@ const mockedOpen = vi.mocked(openRepo)
 const mockedStatus = vi.mocked(readStatus)
 const mockedStage = vi.mocked(stageFile)
 const mockedUnstage = vi.mocked(unstageFile)
+const mockedStageFiles = vi.mocked(stageFiles)
+const mockedUnstageFiles = vi.mocked(unstageFiles)
+const mockedDiffUnstaged = vi.mocked(diffUnstaged)
+const mockedDiffStaged = vi.mocked(diffStaged)
 
 const INFO: RepoInfo = { root: '/repo', name: 'repo', branch: 'main' }
 const STATUS: RepoStatus = {
@@ -34,6 +44,9 @@ const STATUS: RepoStatus = {
 describe('useRepoStore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // open/refresh prime the diff store (both sections) — keep that read benign.
+    mockedDiffUnstaged.mockResolvedValue([])
+    mockedDiffStaged.mockResolvedValue([])
     useRepoStore.setState({
       phase: 'empty',
       info: null,
@@ -186,6 +199,48 @@ describe('useRepoStore', () => {
 
     await useRepoStore.getState().unstage('src/b.ts')
     expect(useRepoStore.getState().reviewedHere).toBe(false)
+  })
+
+  it('bulk-validates a section in one call and re-reads the status once', async () => {
+    useRepoStore.setState({ phase: 'ready', info: INFO, status: STATUS })
+    mockedStageFiles.mockResolvedValue()
+    mockedStatus.mockResolvedValue({ unstaged: [], staged: STATUS.staged })
+
+    const ok = await useRepoStore.getState().stageMany(['src/a.ts', 'src/x.ts'])
+
+    expect(ok).toBe(true)
+    expect(mockedStageFiles).toHaveBeenCalledWith('/repo', ['src/a.ts', 'src/x.ts'])
+    expect(mockedStatus).toHaveBeenCalledTimes(1)
+    expect(useRepoStore.getState().reviewedHere).toBe(true)
+  })
+
+  it('bulk-unvalidates a section in one call', async () => {
+    useRepoStore.setState({ phase: 'ready', info: INFO, status: STATUS })
+    mockedUnstageFiles.mockResolvedValue()
+    mockedStatus.mockResolvedValue(STATUS)
+
+    const ok = await useRepoStore.getState().unstageMany(['src/b.ts'])
+
+    expect(ok).toBe(true)
+    expect(mockedUnstageFiles).toHaveBeenCalledWith('/repo', ['src/b.ts'])
+    // Un-validating is not reviewing, so the completion gate stays disarmed.
+    expect(useRepoStore.getState().reviewedHere).toBe(false)
+  })
+
+  it('re-reads the status after a failed bulk write so a partial result is reflected', async () => {
+    useRepoStore.setState({ phase: 'ready', info: INFO, status: STATUS })
+    // A batched write can apply earlier files before a later chunk fails: the
+    // store must refresh so the sidebar reflects what actually landed.
+    mockedStageFiles.mockRejectedValue(new Error('échec partiel'))
+    const partial: RepoStatus = { unstaged: [], staged: [{ path: 'src/a.ts', kind: 'modified' }] }
+    mockedStatus.mockResolvedValue(partial)
+
+    const ok = await useRepoStore.getState().stageMany(['src/a.ts', 'src/x.ts'])
+
+    expect(ok).toBe(false)
+    expect(mockedStatus).toHaveBeenCalledWith('/repo')
+    expect(useRepoStore.getState().status).toEqual(partial)
+    expect(useRepoStore.getState().error).toBe('échec partiel')
   })
 
   it('resets the diff store when a different repository is opened', async () => {

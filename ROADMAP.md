@@ -77,6 +77,16 @@ Gardées pour ne rien perdre ; à promouvoir vers P0/P1/P2 si l'on décide de s'
 - [ ] **Message de commit généré (IA)** — titre + description depuis le diff validé (précédent
   Copilot / GitHub Desktop 3.5). *Dépend de la création de commit.*
 
+## Dette technique (perf)
+
+L'app reste fluide sur un diff d'agent typique ; ce point plafonne sur de très gros changesets.
+
+- [ ] **Liste de fichiers virtualisée** — le diff est virtualisé, pas la sidebar : sur un très
+  gros changeset chaque validation re-rend toutes les lignes (déjà mémoïsées). Virtualiser la
+  liste plate lèverait ce plafond. *Note : les compteurs `+/−` et le rendu sont désormais servis
+  par un seul chargement des deux sections (`use-diff-store`), au prix d'un payload IPC portant
+  tous les hunks ; un diff par fichier l'allégerait, mais re-fetcherait à chaque navigation.*
+
 ---
 
 ## Veille concurrentielle (résumé)

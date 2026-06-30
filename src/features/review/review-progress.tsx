@@ -30,7 +30,7 @@ export function ReviewProgress() {
       >
         <div
           className="review-progress__fill"
-          style={{ width: `${Math.round(ratio * 100)}%` } as CSSProperties}
+          style={{ transform: `scaleX(${ratio})` } as CSSProperties}
         />
       </div>
       <span className="review-progress__label">

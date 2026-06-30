@@ -181,6 +181,39 @@ describe('useSidebarKeyboard', () => {
     expect(actions.act).toHaveBeenCalledTimes(1)
   })
 
+  it('snaps the diff back to the acted file when the validate fails', async () => {
+    const select = vi.fn()
+    const actions: RowActions = { select, act: () => Promise.resolve(false) }
+    render(<Harness actions={actions} />)
+    const a = screen.getByText('a')
+    a.focus()
+    fireEvent.keyDown(a, { key: 'Enter' })
+    // Optimistically advances the diff to the next sibling…
+    expect(select).toHaveBeenCalledWith('unstaged', 'b.ts')
+    // …then, once the failed write settles, restores it to the file that stayed.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(select).toHaveBeenLastCalledWith('unstaged', 'a.ts')
+  })
+
+  it('does not snap back if the cursor moved away during the failed write', async () => {
+    let resolveAct: (underway: boolean) => void = () => {}
+    const select = vi.fn()
+    const actions: RowActions = { select, act: () => new Promise((res) => (resolveAct = res)) }
+    render(<Harness actions={actions} />)
+    const a = screen.getByText('a')
+    a.focus()
+    fireEvent.keyDown(a, { key: 'Enter' }) // optimistic select('unstaged','b.ts'); act in flight
+    // The user navigates elsewhere before the write resolves.
+    screen.getByText('c').focus()
+    resolveAct(false)
+    await Promise.resolve()
+    await Promise.resolve()
+    // The late failure must not pull the diff back to a.ts — focus has moved on.
+    expect(select).toHaveBeenCalledTimes(1)
+    expect(select).toHaveBeenCalledWith('unstaged', 'b.ts')
+  })
+
   it('focuses the filter on "/"', () => {
     const actions = makeActions()
     render(<Harness actions={actions} />)

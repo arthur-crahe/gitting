@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { Chevron } from '../../components/icons'
 import type { StatusEntry } from '../../lib/git'
 import type { DiffSection } from '../../stores/use-diff-store'
@@ -39,18 +39,20 @@ interface RowProps {
   onToggle: (path: string) => void
 }
 
-/** A file leaf: the select target with its status glyph and validate action. */
-function TreeFile({
-  node,
-  depth,
-  section,
-  recede,
-}: {
+/** Props for a tree file leaf. */
+interface TreeFileProps {
   node: FileNode
   depth: number
   section: DiffSection
   recede?: boolean
-}) {
+}
+
+/**
+ * A file leaf: the select target with its status glyph and validate action.
+ * Memoized by value (a status refresh rebuilds the tree nodes), as the flat-list
+ * `FileRow` is, so an unchanged leaf and its file-type icon skip re-render.
+ */
+const TreeFile = memo(function TreeFile({ node, depth, section, recede }: TreeFileProps) {
   const { select } = useRowActions()
   const selected = useIsSelected(section, node.entry.path)
   const pending = useRepoStore((s) => s.pendingPaths.has(node.entry.path))
@@ -78,6 +80,19 @@ function TreeFile({
       </button>
       <RowEnd section={section} path={node.entry.path} kind={node.entry.kind} />
     </div>
+  )
+}, sameLeaf)
+
+/** Compares leaves by value (path/kind/name/depth/section/recede), so a rebuilt
+ * but unchanged node skips re-render; selection and pending come from stores. */
+function sameLeaf(prev: TreeFileProps, next: TreeFileProps): boolean {
+  return (
+    prev.section === next.section &&
+    prev.depth === next.depth &&
+    prev.recede === next.recede &&
+    prev.node.name === next.node.name &&
+    prev.node.entry.path === next.node.entry.path &&
+    prev.node.entry.kind === next.node.entry.kind
   )
 }
 

@@ -31,7 +31,7 @@ describe('DiffView', () => {
   it('renders the virtualized scroller for a file with hunks', () => {
     const { container } = render(<DiffView file={FILE} />)
     expect(container.querySelector('.diff-scroll')).not.toBeNull()
-    expect(container.querySelector('.diff-empty')).toBeNull()
+    expect(container.querySelector('.diff-notice')).toBeNull()
   })
 
   it('shows a notice instead of a scroller for a binary file', () => {

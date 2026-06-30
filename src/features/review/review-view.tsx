@@ -11,7 +11,7 @@ import { SidebarResizer } from './sidebar-resizer'
 
 /**
  * The review surface for an opened repository: an edge-to-edge master-detail
- * split. The left pane is the redesigned {@link Sidebar} (filter, two sections,
+ * split. The left pane is the {@link Sidebar} (filter, two sections,
  * keyboard burn-down); the right pane is the diff of the selected file. Selecting
  * a file opens its diff; its validate/unvalidate action stages or unstages it,
  * moving it between the sections and re-aligning the open diff. Row interactions
@@ -31,7 +31,7 @@ export function ReviewView() {
     () => ({
       select: (section, path) => {
         if (root) {
-          void select(root, { section, path })
+          select(root, { section, path })
         }
       },
       act: (section, path) => (section === 'unstaged' ? stage(path) : unstage(path)),

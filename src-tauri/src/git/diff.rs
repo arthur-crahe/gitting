@@ -22,8 +22,8 @@ use gix::status::{self, index_worktree::Item as WorktreeItem};
 use gix::ObjectId;
 
 use super::error::GitError;
-use super::status::{path_string, status_iter, worktree_kind};
-use super::{ChangeKind, DiffFile, DiffLineKind, DiffStats, FileStat, Hunk, Line};
+use super::status::{path_string, staged_kind, status_iter, worktree_kind};
+use super::{ChangeKind, DiffFile, DiffLineKind, Hunk, Line};
 
 /// An index-entry file mode, as carried by both status sides.
 type EntryMode = gix::index::entry::Mode;
@@ -80,32 +80,6 @@ pub fn diff_unstaged(path: &Path) -> Result<Vec<DiffFile>, GitError> {
     Ok(out)
 }
 
-/// Reads the per-file `+N −N` line counts for both review sections — the
-/// sidebar's change magnitude. Summed from the same hunks [`diff_staged`] and
-/// [`diff_unstaged`] produce, so the counts can never disagree with the rendered
-/// diff, and only the totals cross the IPC boundary instead of every hunk. A
-/// hunkless file (binary, conflict, submodule, mode-only or notice) is `0 / 0`.
-pub fn diff_stats(path: &Path) -> Result<DiffStats, GitError> {
-    Ok(DiffStats {
-        unstaged: diff_unstaged(path)?.iter().map(file_stat).collect(),
-        staged: diff_staged(path)?.iter().map(file_stat).collect(),
-    })
-}
-
-/// Sums a file's added and removed lines across its hunks.
-fn file_stat(file: &DiffFile) -> FileStat {
-    let mut add = 0;
-    let mut del = 0;
-    for line in file.hunks.iter().flat_map(|hunk| &hunk.lines) {
-        match line.kind {
-            DiffLineKind::Add => add += 1,
-            DiffLineKind::Delete => del += 1,
-            DiffLineKind::Context => {}
-        }
-    }
-    FileStat { path: file.path.clone(), add, del }
-}
-
 /// Lowers one staged change (HEAD-tree → index) into a [`DiffFile`].
 fn staged_file(
     repo: &gix::Repository,
@@ -113,7 +87,10 @@ fn staged_file(
     change: Change,
     null: ObjectId,
 ) -> Result<DiffFile, GitError> {
-    let (path, kind, old, new): (String, ChangeKind, Option<Blob>, Option<Blob>) = match change {
+    let kind = staged_kind(&change);
+    // The kind comes from the shared classifier above; this match only extracts
+    // each variant's path and its old/new blob sides for the diff pipeline.
+    let (path, old, new): (String, Option<Blob>, Option<Blob>) = match change {
         Change::Addition {
             location,
             entry_mode,
@@ -121,7 +98,6 @@ fn staged_file(
             ..
         } => (
             path_string(&location),
-            ChangeKind::Added,
             None,
             Some((id.into_owned(), entry_mode)),
         ),
@@ -132,7 +108,6 @@ fn staged_file(
             ..
         } => (
             path_string(&location),
-            ChangeKind::Deleted,
             Some((id.into_owned(), entry_mode)),
             None,
         ),
@@ -145,7 +120,6 @@ fn staged_file(
             ..
         } => (
             path_string(&location),
-            ChangeKind::Modified,
             Some((previous_id.into_owned(), previous_entry_mode)),
             Some((id.into_owned(), entry_mode)),
         ),
@@ -158,7 +132,6 @@ fn staged_file(
             ..
         } => (
             path_string(&location),
-            ChangeKind::Renamed,
             Some((source_id.into_owned(), source_entry_mode)),
             Some((id.into_owned(), entry_mode)),
         ),
@@ -376,7 +349,7 @@ fn octal_mode(mode: EntryMode) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{diff_staged, diff_stats, diff_unstaged};
+    use super::{diff_staged, diff_unstaged};
     use crate::git::test_support::TempRepo;
     use crate::git::{ChangeKind, DiffFile, DiffLineKind};
 
@@ -611,44 +584,6 @@ mod tests {
         // The sibling file still carries its real diff — the section was not abandoned.
         let edited = files.iter().find(|f| f.path == "a.txt").expect("a.txt listed");
         assert!(!edited.hunks.is_empty(), "the reviewable file keeps its hunks");
-    }
-
-    #[test]
-    fn diff_stats_sum_adds_and_deletes_per_section() {
-        let repo = TempRepo::init();
-        repo.write("a.txt", "a\nb\nc\n");
-        repo.stage("a.txt");
-        repo.commit("add a.txt");
-
-        // Unstaged: one line swapped in a.txt (1 add, 1 del) and a new untracked file.
-        repo.write("a.txt", "a\nB\nc\n");
-        repo.write("new.txt", "x\ny\n");
-
-        let stats = diff_stats(repo.path()).expect("stats");
-        let a = stats.unstaged.iter().find(|s| s.path == "a.txt").expect("a.txt counted");
-        assert_eq!((a.add, a.del), (1, 1));
-        let new = stats.unstaged.iter().find(|s| s.path == "new.txt").expect("new.txt counted");
-        assert_eq!((new.add, new.del), (2, 0), "a brand-new file is all additions");
-        assert!(stats.staged.is_empty(), "nothing is staged yet");
-
-        // Once a.txt is staged, its magnitude moves to the staged section.
-        repo.stage("a.txt");
-        let stats = diff_stats(repo.path()).expect("stats");
-        let a = stats.staged.iter().find(|s| s.path == "a.txt").expect("a.txt staged");
-        assert_eq!((a.add, a.del), (1, 1));
-    }
-
-    #[test]
-    fn diff_stats_report_zero_for_a_binary_file() {
-        let repo = TempRepo::init();
-        repo.write("data.bin", "before\0\x01\x02");
-        repo.stage("data.bin");
-        repo.commit("add binary");
-
-        repo.write("data.bin", "after\0\x03\x04\x05");
-        let stats = diff_stats(repo.path()).expect("stats");
-        let bin = stats.unstaged.iter().find(|s| s.path == "data.bin").expect("binary counted");
-        assert_eq!((bin.add, bin.del), (0, 0), "a binary file has no countable lines");
     }
 
     #[cfg(unix)]

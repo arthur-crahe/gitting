@@ -24,6 +24,12 @@ function fileRows(root: HTMLElement | null): HTMLElement[] {
   return root ? Array.from(root.querySelectorAll<HTMLElement>('[data-file-row]')) : []
 }
 
+/** The file-row element that currently holds focus, or `null`. */
+function focusedRow(): HTMLElement | null {
+  const active = document.activeElement
+  return active instanceof HTMLElement ? active.closest<HTMLElement>('[data-file-row]') : null
+}
+
 /** Reads a row element's section + path, or `null` when it is not a file row. */
 function rowId(el: HTMLElement | null | undefined): RowId | null {
   const section = el?.getAttribute('data-section')
@@ -55,7 +61,7 @@ interface KeyboardOptions {
 }
 
 /**
- * The sidebar's keyboard model (see the redesign spec). Navigation walks the
+ * The sidebar's keyboard model. Navigation walks the
  * rendered `[data-file-row]` nodes in document order, so it stays correct across
  * the flat list, the tree, an active filter and collapsed folders with no
  * duplicated model:
@@ -121,8 +127,7 @@ export function useSidebarKeyboard({ rootRef, filterRef, actions, clearFilter }:
   const openFocusedRow = useCallback(() => {
     throttleTimer.current = null
     lastOpenAt.current = Date.now()
-    const active = document.activeElement
-    const el = active instanceof HTMLElement ? active.closest<HTMLElement>('[data-file-row]') : null
+    const el = focusedRow()
     if (el && rootRef.current?.contains(el)) {
       open(el)
     }
@@ -162,13 +167,22 @@ export function useSidebarKeyboard({ rootRef, filterRef, actions, clearFilter }:
       if (nextId) {
         actions.select(nextId.section, nextId.path)
       }
-      // Disarm the recovery latch if the write fails: no section change will
-      // arrive to consume it, so a later unrelated status change must not be able
-      // to fire it and yank focus to a row the user never acted on.
+      // On a failed write nothing moves sections, so no refresh arrives to align
+      // the panel. Undo the optimistic advance: disarm the recovery latch (so a
+      // later unrelated status change can't fire it and yank focus to a row the
+      // user never acted on) and, if a sibling was pre-opened, snap the diff back
+      // to the acted file — but only while the cursor is still on it, so a late
+      // failure can't pull the diff away from a row the user has navigated to
+      // during the in-flight write.
       void Promise.resolve(actions.act(id.section, id.path)).then((underway) => {
-        if (!underway) {
-          recover.current = false
-          pendingFocus.current = null
+        if (underway) {
+          return
+        }
+        recover.current = false
+        pendingFocus.current = null
+        const focused = rowId(focusedRow())
+        if (nextId && focused?.section === id.section && focused.path === id.path) {
+          actions.select(id.section, id.path)
         }
       })
     },

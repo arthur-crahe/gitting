@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import type { StatusEntry } from '../../lib/git'
 import { splitPath } from '../../lib/path'
 import type { DiffSection } from '../../stores/use-diff-store'
@@ -21,8 +22,12 @@ const LRM = String.fromCharCode(0x200e)
  * name back for the "Validé" archive. The select target carries `data-file-row`
  * (+ section/path) so the keyboard model can traverse it, and `tabindex={-1}` so
  * it is reachable by the arrow keys, not the Tab order.
+ *
+ * Memoized on its identity (section/path/kind/recede): a status refresh rebuilds
+ * the entry objects, so without this every row — and its file-type icon — would
+ * re-render though only the validated file actually changed.
  */
-export function FileRow({
+export const FileRow = memo(function FileRow({
   section,
   entry,
   recede,
@@ -67,5 +72,22 @@ export function FileRow({
       </button>
       <RowEnd section={section} path={entry.path} kind={entry.kind} />
     </li>
+  )
+}, sameRow)
+
+/**
+ * Compares rows by value, not by the `entry` object identity (a status refresh
+ * rebuilds every entry), so an unchanged row genuinely skips re-render. Selection
+ * and pending are read from stores inside the row, so they still update it.
+ */
+function sameRow(
+  prev: { section: DiffSection; entry: StatusEntry; recede?: boolean },
+  next: { section: DiffSection; entry: StatusEntry; recede?: boolean },
+): boolean {
+  return (
+    prev.section === next.section &&
+    prev.recede === next.recede &&
+    prev.entry.path === next.entry.path &&
+    prev.entry.kind === next.entry.kind
   )
 }

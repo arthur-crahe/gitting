@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use crate::git::{self, DiffFile, DiffStats, GitError, RepoInfo, RepoStatus};
+use crate::git::{self, DiffFile, GitError, RepoInfo, RepoStatus};
 
 /// Opens the repository enclosing `path` and returns its identity.
 #[tauri::command]
@@ -31,12 +31,6 @@ pub async fn diff_unstaged(path: String) -> Result<Vec<DiffFile>, GitError> {
 #[tauri::command]
 pub async fn diff_staged(path: String) -> Result<Vec<DiffFile>, GitError> {
     run(move || git::diff_staged(&PathBuf::from(path))).await
-}
-
-/// Reads the per-file `+N −N` line counts for both review sections.
-#[tauri::command]
-pub async fn diff_stats(path: String) -> Result<DiffStats, GitError> {
-    run(move || git::diff_stats(&PathBuf::from(path))).await
 }
 
 /// Validates a file: stages it, moving it from "À reviewer" to "Validé".

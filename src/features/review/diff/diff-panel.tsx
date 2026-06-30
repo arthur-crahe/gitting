@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { DocumentIcon } from '../../../components/icons'
 import { countDiffLines } from '../../../lib/diff-stats'
 import { useDiffStore } from '../../../stores/use-diff-store'
@@ -50,12 +51,12 @@ export function DiffPanel() {
   const diff = useDiffStore((s) => s.diff)
   const phase = useDiffStore((s) => s.phase)
   const error = useDiffStore((s) => s.error)
+  // Summed once per loaded diff, not on every render (loading→ready, selection).
+  const stat = useMemo(() => (diff && diff.hunks.length > 0 ? countDiffLines(diff) : null), [diff])
 
   if (!selected) {
     return <EmptyPane />
   }
-
-  const stat = diff && diff.hunks.length > 0 ? countDiffLines(diff) : null
 
   return (
     <div className="diff-panel">

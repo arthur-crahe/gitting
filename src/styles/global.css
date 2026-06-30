@@ -172,13 +172,16 @@ body {
   overflow: hidden;
 }
 
+/* A full-width bar scaled along X to the staged ratio, so the burn-down fill
+ * animates a transform — off the layout path, per the system's "transform/opacity
+ * only" rule. */
 .review-progress__fill {
   position: absolute;
-  inset: 0 auto 0 0;
-  height: 100%;
+  inset: 0;
   border-radius: 2px;
   background: var(--accent-a8);
-  transition: width var(--dur-enter) var(--ease-out);
+  transform-origin: left center;
+  transition: transform var(--dur-enter) var(--ease-out);
 }
 
 /* The bar reads "done" in the accent's solid step the moment the queue empties. */

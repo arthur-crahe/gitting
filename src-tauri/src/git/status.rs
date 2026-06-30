@@ -30,13 +30,7 @@ pub fn read_status(path: &Path) -> Result<RepoStatus, GitError> {
             status::Item::TreeIndex(change) => {
                 let (location, ..) = change.fields();
                 let path = path_string(location);
-                let kind = match &change {
-                    gix::diff::index::Change::Addition { .. } => ChangeKind::Added,
-                    gix::diff::index::Change::Deletion { .. } => ChangeKind::Deleted,
-                    gix::diff::index::Change::Modification { .. } => ChangeKind::Modified,
-                    gix::diff::index::Change::Rewrite { .. } => ChangeKind::Renamed,
-                };
-                staged.push(StatusEntry { path, kind });
+                staged.push(StatusEntry { path, kind: staged_kind(&change) });
             }
 
             // Unstaged: index vs. working tree.
@@ -106,6 +100,19 @@ pub(super) fn status_iter(
         .into_iter(None::<BString>)
         .map_err(|e| GitError::Status(e.to_string()))?;
     Ok(iter.map(|item| item.map_err(|e| GitError::Status(e.to_string()))))
+}
+
+/// Maps a staged (HEAD-tree vs. index) change to a [`ChangeKind`]. Shared with
+/// [`super::diff`] so the staged file list and the staged diff classify a file
+/// identically — the staged counterpart of [`worktree_kind`].
+pub(super) fn staged_kind(change: &gix::diff::index::Change) -> ChangeKind {
+    use gix::diff::index::Change;
+    match change {
+        Change::Addition { .. } => ChangeKind::Added,
+        Change::Deletion { .. } => ChangeKind::Deleted,
+        Change::Modification { .. } => ChangeKind::Modified,
+        Change::Rewrite { .. } => ChangeKind::Renamed,
+    }
 }
 
 /// Maps an index-vs-worktree entry status to a [`ChangeKind`], or `None` for a

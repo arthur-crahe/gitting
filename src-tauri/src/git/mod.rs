@@ -16,7 +16,7 @@ mod status;
 #[cfg(test)]
 mod test_support;
 
-pub use diff::{diff_staged, diff_stats, diff_unstaged};
+pub use diff::{diff_staged, diff_unstaged};
 pub use error::GitError;
 pub use index_write::{stage_file, stage_files, unstage_file, unstage_files};
 pub use repo::open_repo;
@@ -145,32 +145,6 @@ pub struct DiffFile {
     /// The diff hunks, in file order; empty for a binary, conflict, submodule or
     /// mode-only file.
     pub hunks: Vec<Hunk>,
-}
-
-/// The added/removed line magnitude of one changed file — the sidebar's `+N −N`
-/// signal, summed from the same `gix` hunks the diff renders. A binary, conflict,
-/// submodule or mode-only file (no hunks) reports `add: 0, del: 0`.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FileStat {
-    /// Repository-relative path.
-    pub path: String,
-    /// Lines added on the new side.
-    pub add: u32,
-    /// Lines removed from the old side.
-    pub del: u32,
-}
-
-/// Per-file line magnitudes for both review sections — the lightweight counts
-/// the sidebar shows, computed server-side so only the totals cross the IPC
-/// boundary instead of every hunk.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiffStats {
-    /// "À reviewer" per-file counts.
-    pub unstaged: Vec<FileStat>,
-    /// "Validé" per-file counts.
-    pub staged: Vec<FileStat>,
 }
 
 #[cfg(test)]

@@ -3,9 +3,9 @@ import { KebabIcon } from '../../components/icons'
 import { useRepoStore } from '../../stores/use-repo-store'
 
 /**
- * Overflow menu in the sidebar header carrying the repo-scoped actions that used
- * to live in a separate toolbar band: re-read the working tree, and switch to a
- * different repository. Folding them here lets the review split run edge to edge.
+ * Overflow menu in the sidebar header for the repo-scoped actions — re-read the
+ * working tree, and switch to a different repository — kept here so the review
+ * split runs edge to edge.
  */
 export function RepoMenu() {
   const refresh = useRepoStore((s) => s.refresh)
