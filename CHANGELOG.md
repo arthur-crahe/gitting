@@ -4,6 +4,15 @@ Notes de version de Gitting, de la plus récente à la plus ancienne, à destina
 
 <!-- release:anchor — /release inserts the new version section directly below this line -->
 
+## [0.6.1] - 2026-06-30
+
+### Corrections
+- Sous Windows, plus de fenêtre console qui apparaît brièvement pendant les opérations git.
+- Le redimensionnement de la barre latérale par glissement fonctionne de nouveau.
+
+### Autres améliorations
+- Refactorisation interne.
+
 ## [0.6.0] - 2026-06-29
 
 ### Nouveautés
