@@ -35,12 +35,14 @@ pub fn unstage_files(path: &Path, files: &[String]) -> Result<(), GitError> {
     GitCli::default().unstage_many(&workdir(path)?, files)
 }
 
-/// Applies a synthesized unified-diff `patch` to the index via `git apply
-/// --cached` (with `--reverse` to unstage) — the primitive behind partial
-/// (hunk/line) staging. The apply is atomic, so a rejected patch leaves the
-/// index untouched; byte-faithful, so the staged blob keeps the reviewed bytes.
-pub fn apply_partial_patch(path: &Path, patch: &[u8], reverse: bool) -> Result<(), GitError> {
-    GitCli::default().apply_partial(&workdir(path)?, patch, reverse)
+/// Applies a synthesized unified-diff `patch` with `git apply` — the primitive
+/// behind partial staging. `cached` targets the index (`--cached`, for
+/// stage/unstage); without it the patch lands on the **working tree** (for
+/// discard). `reverse` applies the patch backwards. The apply is atomic, so a
+/// rejected patch leaves the target untouched; byte-faithful, so what lands keeps
+/// the reviewed bytes.
+pub fn apply_partial_patch(path: &Path, patch: &[u8], reverse: bool, cached: bool) -> Result<(), GitError> {
+    GitCli::default().apply_partial(&workdir(path)?, patch, reverse, cached)
 }
 
 /// The working-tree root of the repository enclosing `path`.
@@ -185,22 +187,24 @@ impl GitCli {
         map_exit(output)
     }
 
-    /// Applies `patch` to the index — a single, atomic `git apply --cached`
-    /// (`--reverse` to unstage). `--recount` tolerates the hunk header's original
-    /// counts; `core.autocrlf`/`safecrlf` are forced off and `--whitespace=nowarn`
-    /// is set so git never rewrites the reviewed bytes; the staged blob is exactly
-    /// what was synthesized.
-    fn apply_partial(&self, root: &Path, patch: &[u8], reverse: bool) -> Result<(), GitError> {
+    /// Applies `patch` with a single, atomic `git apply` — `--cached` to target the
+    /// index (stage/unstage), else the working tree (discard); `--reverse` applies
+    /// it backwards. `--recount` tolerates the hunk header's original counts;
+    /// `core.autocrlf`/`safecrlf` are forced off and `--whitespace=nowarn` is set so
+    /// git never rewrites the reviewed bytes; what lands is exactly what was synthesized.
+    fn apply_partial(&self, root: &Path, patch: &[u8], reverse: bool, cached: bool) -> Result<(), GitError> {
         let mut args: Vec<&str> = vec![
             "-c",
             "core.autocrlf=false",
             "-c",
             "core.safecrlf=false",
             "apply",
-            "--cached",
             "--whitespace=nowarn",
             "--recount",
         ];
+        if cached {
+            args.push("--cached");
+        }
         if reverse {
             args.push("--reverse");
         }

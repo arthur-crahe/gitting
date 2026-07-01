@@ -487,7 +487,7 @@ mod tests {
         let hunk = one_change_hunk("b", "B");
         let patch = build_patch(&file, None, None, &hunk, &raw_lines(b"a\nb\nc\n"), &raw_lines(b"a\nB\nc\n"), false)
             .expect("patch");
-        apply_partial_patch(repo.path(), &patch, false).expect("apply");
+        apply_partial_patch(repo.path(), &patch, false, true).expect("apply");
 
         assert_eq!(repo.index_blob("f.txt"), b"a\nB\nc\n");
     }
@@ -503,7 +503,7 @@ mod tests {
         let hunk = one_change_hunk("b", "B");
         let patch = build_patch(&file, None, None, &hunk, &raw_lines(b"a\r\nb\r\nc\r\n"), &raw_lines(b"a\r\nB\r\nc\r\n"), false)
             .expect("patch");
-        apply_partial_patch(repo.path(), &patch, false).expect("apply");
+        apply_partial_patch(repo.path(), &patch, false, true).expect("apply");
 
         // The staged blob keeps every \r\n — the Windows path the naive
         // diff-sourced patch would have flattened to LF.
@@ -521,7 +521,7 @@ mod tests {
         let hunk = one_change_hunk("b", "B");
         let patch = build_patch(&file, None, None, &hunk, &raw_lines(b"a\nb\nc"), &raw_lines(b"a\nB\nc"), false)
             .expect("patch");
-        apply_partial_patch(repo.path(), &patch, false).expect("apply");
+        apply_partial_patch(repo.path(), &patch, false, true).expect("apply");
 
         assert_eq!(repo.index_blob("f.txt"), b"a\nB\nc");
     }
@@ -542,7 +542,7 @@ mod tests {
         let hunk = one_change_hunk("b", "B");
         let patch = build_patch(&file, None, None, &hunk, &raw_lines(b"a\nb\nc\n"), &raw_lines(b"a\nB\nc\n"), true)
             .expect("patch");
-        apply_partial_patch(repo.path(), &patch, true).expect("reverse apply");
+        apply_partial_patch(repo.path(), &patch, true, true).expect("reverse apply");
 
         assert_eq!(repo.index_blob("f.txt"), b"a\nb\nc\n");
     }

@@ -69,6 +69,13 @@ pub async fn unstage_partial(path: String, file: String, selection: Vec<HunkSele
     run(move || git::unstage_partial(&PathBuf::from(path), &file, &selection)).await
 }
 
+/// Discards selected hunks/lines of a file ("rejeter") — reverts them in the
+/// working tree. Destructive: the thrown-away change is not recoverable.
+#[tauri::command]
+pub async fn discard_partial(path: String, file: String, selection: Vec<HunkSelection>) -> Result<(), GitError> {
+    run(move || git::discard_partial(&PathBuf::from(path), &file, &selection)).await
+}
+
 /// Runs a blocking git operation on the blocking pool, flattening a join panic
 /// into a [`GitError`].
 async fn run<T, F>(op: F) -> Result<T, GitError>

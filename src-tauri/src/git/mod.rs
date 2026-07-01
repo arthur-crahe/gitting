@@ -21,7 +21,7 @@ mod test_support;
 pub use diff::{diff_staged, diff_unstaged};
 pub use error::GitError;
 pub use index_write::{stage_file, stage_files, unstage_file, unstage_files};
-pub use partial::{stage_partial, unstage_partial};
+pub use partial::{discard_partial, stage_partial, unstage_partial};
 pub use repo::open_repo;
 pub use status::read_status;
 

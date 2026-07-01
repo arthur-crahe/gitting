@@ -19,14 +19,61 @@ use super::hunk_patch::{file_header, hunk_block, hunk_fingerprint, raw_lines, Pa
 use super::index_write::{apply_partial_patch, reject_unsafe_str};
 use super::{ChangeKind, GitError, Hunk, HunkSelection};
 
-/// Stages the selected whole hunks of `file` — À reviewer → Validé.
-pub fn stage_partial(path: &Path, file: &str, selection: &[HunkSelection]) -> Result<(), GitError> {
-    apply_selection(path, file, selection, false)
+/// What the caller is doing with the selected hunks/lines — which sets the diff
+/// section to read, how the patch body is built, and how `git apply` runs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Op {
+    /// À reviewer → Validé: `git apply --cached` (index gets the change).
+    Stage,
+    /// Validé → À reviewer: `git apply --cached --reverse` (index reverts it).
+    Unstage,
+    /// Reject in the working tree: `git apply --reverse` (no `--cached`) — the
+    /// same forward patch as [`Op::Stage`], applied backwards to the worktree, so
+    /// the change is thrown away on disk. Destructive.
+    Discard,
 }
 
-/// Unstages the selected whole hunks of `file` — Validé → À reviewer.
+impl Op {
+    /// The staged section (HEAD → index) is read only when unstaging; stage and
+    /// discard both work from the unstaged section (index → worktree).
+    fn staged_section(self) -> bool {
+        matches!(self, Op::Unstage)
+    }
+
+    /// Whether the patch body is built backwards — its context and kept lines come
+    /// from the **new** side, which is what a `--reverse` apply matches. True for
+    /// unstage (matches the index) and discard (matches the worktree); false for
+    /// stage (a forward apply matches the index/old side).
+    fn build_reverse(self) -> bool {
+        matches!(self, Op::Unstage | Op::Discard)
+    }
+
+    /// `--reverse` on the git apply: unstaging (against the index) and discarding
+    /// (against the worktree) both apply the patch backwards.
+    fn apply_reverse(self) -> bool {
+        matches!(self, Op::Unstage | Op::Discard)
+    }
+
+    /// `--cached`: stage and unstage touch the index; discard touches the worktree.
+    fn cached(self) -> bool {
+        !matches!(self, Op::Discard)
+    }
+}
+
+/// Stages the selected hunks/lines of `file` — À reviewer → Validé.
+pub fn stage_partial(path: &Path, file: &str, selection: &[HunkSelection]) -> Result<(), GitError> {
+    apply_selection(path, file, selection, Op::Stage)
+}
+
+/// Unstages the selected staged hunks/lines of `file` — Validé → À reviewer.
 pub fn unstage_partial(path: &Path, file: &str, selection: &[HunkSelection]) -> Result<(), GitError> {
-    apply_selection(path, file, selection, true)
+    apply_selection(path, file, selection, Op::Unstage)
+}
+
+/// Discards the selected hunks/lines of `file` — reverts them in the working
+/// tree. **Destructive and irreversible**: the thrown-away change is not recoverable.
+pub fn discard_partial(path: &Path, file: &str, selection: &[HunkSelection]) -> Result<(), GitError> {
+    apply_selection(path, file, selection, Op::Discard)
 }
 
 /// The stale-diff error: the on-screen hunk no longer matches the repository, so
@@ -35,28 +82,26 @@ fn stale() -> GitError {
     GitError::Index("le diff a changé, rechargez".into())
 }
 
-/// Re-diffs `file`, validates `selection` against the fresh hunks, and applies a
-/// single patch carrying every selected hunk. `reverse` picks the direction: the
-/// staged section (HEAD → index, unstage) when `true`, else the unstaged one
-/// (index → worktree, stage).
-fn apply_selection(path: &Path, file: &str, selection: &[HunkSelection], reverse: bool) -> Result<(), GitError> {
+/// Re-diffs `file`, validates `selection` against the fresh hunks, builds a single
+/// patch carrying every selected hunk/line subset, and applies it per `op`.
+fn apply_selection(path: &Path, file: &str, selection: &[HunkSelection], op: Op) -> Result<(), GitError> {
     reject_unsafe_str(file)?;
     if selection.is_empty() {
         return Ok(());
     }
 
-    let sides = diff_one(path, file, reverse)?
+    let sides = diff_one(path, file, op.staged_section())?
         .ok_or_else(|| GitError::Index(format!("fichier absent du diff : {file}")))?;
-    // A modified file is patched in place; a new (untracked) file is created in the
-    // index from `/dev/null` with just its selected lines. Everything else
-    // (binary, submodule, conflict, type-change, rename, added, deleted) stays
-    // whole-file — the caller degrades to `stage_file`/`unstage_file`.
-    let shape = match sides.file.change_kind {
-        ChangeKind::Modified => PatchShape::Modify,
-        ChangeKind::Untracked if !reverse => PatchShape::Create,
+    // A modified file is patched in place; a new (untracked) file is *staged* by
+    // creating it in the index from `/dev/null` with just its selected lines.
+    // Everything else (binary, submodule, conflict, type-change, rename, added,
+    // deleted — and any new file for unstage/discard) stays whole-file.
+    let shape = match (op, sides.file.change_kind) {
+        (_, ChangeKind::Modified) => PatchShape::Modify,
+        (Op::Stage, ChangeKind::Untracked) => PatchShape::Create,
         _ => {
             return Err(GitError::Index(
-                "staging partiel réservé aux fichiers modifiés ou nouveaux — le reste se valide en entier".into(),
+                "action partielle réservée aux fichiers modifiés (ou nouveaux, à valider) — le reste se traite en entier".into(),
             ))
         }
     };
@@ -64,10 +109,11 @@ fn apply_selection(path: &Path, file: &str, selection: &[HunkSelection], reverse
     let repo = super::repo::discover(path)?;
     let workdir = repo.workdir().ok_or(GitError::Bare)?.to_owned();
 
-    // Raw byte streams for the two sides: staging reads new from the worktree,
-    // unstaging from the index blob; the old side is always a stored blob.
+    // Raw byte streams for the two sides. The old side is always a stored blob;
+    // the new side is the index blob when unstaging, else the worktree file (stage
+    // and discard both work index → worktree).
     let old_bytes = read_blob(&repo, sides.old_id)?;
-    let new_bytes = if reverse {
+    let new_bytes = if op.staged_section() {
         read_blob(&repo, sides.new_id)?
     } else {
         std::fs::read(workdir.join(file)).map_err(|e| GitError::Index(e.to_string()))?
@@ -78,7 +124,7 @@ fn apply_selection(path: &Path, file: &str, selection: &[HunkSelection], reverse
     let new_hex = sides.new_id.map(|id| id.to_string());
 
     // One patch carrying every selected hunk in file order, applied once so a
-    // multi-hunk selection stays consistent against a single pre-image index.
+    // multi-hunk selection stays consistent against a single pre-image.
     let mut order: Vec<&HunkSelection> = selection.iter().collect();
     order.sort_by_key(|s| s.hunk);
     order.dedup_by_key(|s| s.hunk);
@@ -87,11 +133,12 @@ fn apply_selection(path: &Path, file: &str, selection: &[HunkSelection], reverse
     for sel in order {
         let hunk = sides.file.hunks.get(sel.hunk as usize).ok_or_else(stale)?;
         verify(hunk, sel)?;
-        // `lines: None` stages the whole hunk (v1); a subset selects those lines (v2).
-        let block = hunk_block(hunk, &raw_old, &raw_new, reverse, sel.lines.as_deref()).ok_or_else(stale)?;
+        // `lines: None` takes the whole hunk; a subset takes those lines.
+        let block =
+            hunk_block(hunk, &raw_old, &raw_new, op.build_reverse(), sel.lines.as_deref()).ok_or_else(stale)?;
         patch.extend(block);
     }
-    apply_partial_patch(path, &patch, reverse)
+    apply_partial_patch(path, &patch, op.apply_reverse(), op.cached())
 }
 
 /// Rejects a hunk whose fresh header tuple or content fingerprint no longer
@@ -118,7 +165,7 @@ fn read_blob(repo: &gix::Repository, id: Option<gix::ObjectId>) -> Result<Vec<u8
 
 #[cfg(test)]
 mod tests {
-    use super::{hunk_fingerprint, stage_partial, unstage_partial};
+    use super::{discard_partial, hunk_fingerprint, stage_partial, unstage_partial};
     use crate::git::test_support::TempRepo;
     use crate::git::{
         diff_staged, diff_unstaged, read_status, DiffFile, DiffLineKind, GitError, Hunk, HunkSelection,
@@ -248,6 +295,39 @@ mod tests {
     }
 
     #[test]
+    fn discarding_a_hunk_reverts_the_working_tree() {
+        let repo = TempRepo::init();
+        repo.write("f.txt", "a\nb\nc\n");
+        repo.stage("f.txt");
+        repo.commit("seed");
+        repo.write("f.txt", "a\nB\nc\n"); // unstaged modification
+
+        let unstaged = diff_unstaged(repo.path()).expect("diff");
+        let file = unstaged.iter().find(|f| f.path == "f.txt").expect("f.txt");
+        discard_partial(repo.path(), "f.txt", &[selection_for(file, 0)]).expect("discard");
+
+        // The worktree is back to the committed content; nothing left to review.
+        assert_eq!(std::fs::read(repo.path().join("f.txt")).unwrap(), b"a\nb\nc\n");
+        let status = read_status(repo.path()).expect("status");
+        assert!(status.unstaged.is_empty(), "the change was discarded");
+        assert!(status.staged.is_empty());
+    }
+
+    #[test]
+    fn discarding_selected_lines_reverts_only_those() {
+        let repo = two_change_repo();
+        let unstaged = diff_unstaged(repo.path()).expect("diff");
+        let file = unstaged.iter().find(|f| f.path == "f.txt").expect("f.txt");
+
+        let mut sel = selection_for(file, 0);
+        sel.lines = Some(first_change_lines(&file.hunks[0])); // discard b→B only
+        discard_partial(repo.path(), "f.txt", &[sel]).expect("discard lines");
+
+        // b reverted in the worktree; d→D kept.
+        assert_eq!(std::fs::read(repo.path().join("f.txt")).unwrap(), b"a\nb\nc\nD\ne\n");
+    }
+
+    #[test]
     fn a_content_reedit_with_the_same_tuple_is_rejected() {
         let repo = two_hunk_repo();
         let unstaged = diff_unstaged(repo.path()).expect("diff");
@@ -314,7 +394,7 @@ mod tests {
         let file = unstaged.iter().find(|f| f.path == "f.txt").expect("f.txt");
         let err = stage_partial(repo.path(), "f.txt", &[selection_for(file, 0)]).expect_err("reject");
         let GitError::Index(message) = err else { panic!("expected Index error") };
-        assert!(message.contains("réservé aux fichiers modifiés ou nouveaux"), "got: {message}");
+        assert!(message.contains("réservée aux fichiers modifiés"), "got: {message}");
     }
 
     #[test]
