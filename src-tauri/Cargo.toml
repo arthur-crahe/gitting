@@ -24,7 +24,7 @@ serde_json = "1"
 # Git layer: gix (gitoxide) reads — the `status` feature pulls in dirwalk/index/
 # blob-diff; `parallel` enables the multi-threaded worktree walk and makes
 # `gix::Repository: Send`. Default features stay on for a C-free zlib backend.
-gix = { version = "0.80", features = ["status", "parallel"] }
+gix = { version = "0.83", features = ["status", "parallel"] }
 thiserror = "2"
 
 # Folder picker for selecting the repository to review.
