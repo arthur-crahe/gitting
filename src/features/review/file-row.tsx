@@ -23,17 +23,20 @@ const LRM = String.fromCharCode(0x200e)
  * (+ section/path) so the keyboard model can traverse it, and `tabindex={-1}` so
  * it is reachable by the arrow keys, not the Tab order.
  *
- * Memoized on its identity (section/path/kind/recede): a status refresh rebuilds
- * the entry objects, so without this every row — and its file-type icon — would
- * re-render though only the validated file actually changed.
+ * Memoized on its identity (section/path/kind/partial/recede): a status refresh
+ * rebuilds the entry objects, so without this every row — and its file-type icon —
+ * would re-render though only the validated file actually changed.
  */
 export const FileRow = memo(function FileRow({
   section,
   entry,
+  partial,
   recede,
 }: {
   section: DiffSection
   entry: StatusEntry
+  /** The file is partially staged (present in both sections). */
+  partial?: boolean
   recede?: boolean
 }) {
   const { select } = useRowActions()
@@ -70,6 +73,11 @@ export const FileRow = memo(function FileRow({
           <span className="file-row__name">{name}</span>
         </span>
       </button>
+      {partial ? (
+        <span className="review-tag" title="Partiellement validé">
+          partiel
+        </span>
+      ) : null}
       <RowEnd section={section} path={entry.path} kind={entry.kind} />
     </li>
   )
@@ -81,12 +89,13 @@ export const FileRow = memo(function FileRow({
  * and pending are read from stores inside the row, so they still update it.
  */
 function sameRow(
-  prev: { section: DiffSection; entry: StatusEntry; recede?: boolean },
-  next: { section: DiffSection; entry: StatusEntry; recede?: boolean },
+  prev: { section: DiffSection; entry: StatusEntry; partial?: boolean; recede?: boolean },
+  next: { section: DiffSection; entry: StatusEntry; partial?: boolean; recede?: boolean },
 ): boolean {
   return (
     prev.section === next.section &&
     prev.recede === next.recede &&
+    prev.partial === next.partial &&
     prev.entry.path === next.entry.path &&
     prev.entry.kind === next.entry.kind
   )

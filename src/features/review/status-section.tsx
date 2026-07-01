@@ -18,6 +18,8 @@ interface StatusSectionProps {
   readonly section: DiffSection
   /** The section's changed files (unfiltered; the section applies the filter). */
   readonly entries: readonly StatusEntry[]
+  /** Paths that are partially staged (present in both sections). */
+  readonly partial?: ReadonlySet<string>
   /** Current filter query. */
   readonly query: string
   /** Flat list or tree layout. */
@@ -46,6 +48,7 @@ export function StatusSection({
   title,
   section,
   entries,
+  partial,
   query,
   mode,
   open,
@@ -82,11 +85,23 @@ export function StatusSection({
       return <span className="review-section__empty">Aucun fichier ne correspond.</span>
     }
     return mode === 'tree' ? (
-      <FileTree entries={filtered} section={section} forceExpand={filtering} recede={recede} />
+      <FileTree
+        entries={filtered}
+        section={section}
+        partial={partial}
+        forceExpand={filtering}
+        recede={recede}
+      />
     ) : (
       <ul className="review-section__list">
         {filtered.map((entry) => (
-          <FileRow key={entry.path} section={section} entry={entry} recede={recede} />
+          <FileRow
+            key={entry.path}
+            section={section}
+            entry={entry}
+            partial={partial?.has(entry.path)}
+            recede={recede}
+          />
         ))}
       </ul>
     )

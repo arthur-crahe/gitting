@@ -1015,6 +1015,25 @@ button.review-section__head:hover .disclosure-chevron {
   color: var(--gray-a11);
 }
 
+/* A quiet "partiel" chip on a partially-staged file (present in both sections):
+ * some hunks validated, some still pending. `position: relative` lifts it above
+ * the select target's transparent click overlay. */
+.review-tag {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: var(--radius-1);
+  background: var(--gray-a3);
+  color: var(--gray-a11);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 15px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  user-select: none;
+}
+
 /* ── File-type icon (left) + git status letter (right) ─────────────────────────*/
 
 /* Colored VSCode-style file/folder icons (react-symbols); fixed 16px column. */
@@ -1418,11 +1437,62 @@ button.review-section__head:hover .disclosure-chevron {
 
 /* The hunk range, pinned to the left edge so it stays put as the code scrolls
  * sideways. The band itself spans the full row, so no background is needed here. */
-.diff-hunk-head__text {
+/* Pins the range and its per-hunk action to the left edge, together, so both
+ * stay legible while the code scrolls horizontally (like the line gutter). */
+.diff-hunk-head__sticky {
   position: sticky;
   left: 0;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
   padding: 0 12px;
+}
+
+.diff-hunk-head__text {
+  display: inline-block;
+}
+
+/* The per-hunk stage/unstage action: a compact ghost button that fits the fixed
+ * 20px header row, revealed on hover (or keyboard focus) so idle headers stay
+ * calm. Disabled — dimmed — while a partial write on this file is in flight. */
+.diff-hunk-head__act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-1);
+  background: none;
+  color: var(--accent-a11);
+  cursor: default;
+  opacity: 0;
+  transition:
+    opacity var(--dur-selection) var(--ease-out),
+    background-color var(--dur-selection) var(--ease-out),
+    color var(--dur-selection) var(--ease-out);
+}
+
+.diff-hunk-head:hover .diff-hunk-head__act,
+.diff-hunk-head__act:focus-visible {
+  opacity: 1;
+}
+
+.diff-hunk-head__act:hover {
+  background: var(--accent-a4);
+  color: var(--accent-12);
+}
+
+.diff-hunk-head__act:focus-visible {
+  outline: 2px solid var(--accent-8);
+  outline-offset: -2px;
+}
+
+.diff-hunk-head__act:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .diff-line {

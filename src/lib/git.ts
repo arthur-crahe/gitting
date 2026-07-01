@@ -69,6 +69,24 @@ export interface Hunk {
 }
 
 /**
+ * A structural selection of one hunk to (un)stage — the wire shape mirroring the
+ * Rust `HunkSelection` (camelCase via serde). It indexes a *freshly re-diffed*
+ * file; the four `*Start`/`*Lines` fields locate the hunk and `fingerprint` (a
+ * content hash — see {@link "./hunk-fingerprint".hunkFingerprint}) guards against a
+ * stale on-screen hunk. `lines` is `null` for a whole hunk (v1); a line-index
+ * array (v2) is rejected by the backend until line-level staging lands.
+ */
+export interface HunkSelection {
+  readonly hunk: number
+  readonly oldStart: number
+  readonly oldLines: number
+  readonly newStart: number
+  readonly newLines: number
+  readonly fingerprint: string
+  readonly lines: readonly number[] | null
+}
+
+/**
  * The structured diff of one changed file — the git-faithful hunks to render,
  * which are exactly the change staging this file would apply. `hunks` is empty
  * for a binary file, an unresolved conflict, or a pure mode change.
@@ -161,6 +179,37 @@ export function stageFiles(path: string, files: readonly string[]): Promise<void
  */
 export function unstageFiles(path: string, files: readonly string[]): Promise<void> {
   return invoke<void>('unstage_files', { path, files })
+}
+
+/**
+ * Validates selected hunks of `file` ("valider ce hunk"): stages exactly the
+ * given {@link HunkSelection}s in the repo at `path`, moving those hunks to
+ * "Validé" while the rest stay in "À reviewer".
+ *
+ * @throws if a selection is stale (the diff changed — reload), the file is not a
+ *   partially-stageable modified file, or the index write fails.
+ */
+export function stagePartial(
+  path: string,
+  file: string,
+  selection: readonly HunkSelection[],
+): Promise<void> {
+  return invoke<void>('stage_partial', { path, file, selection })
+}
+
+/**
+ * Un-validates selected staged hunks of `file` ("renvoyer ce hunk en review"):
+ * sends exactly the given {@link HunkSelection}s back to "À reviewer".
+ *
+ * @throws if a selection is stale (the diff changed — reload), the file is not a
+ *   partially-stageable modified file, or the index write fails.
+ */
+export function unstagePartial(
+  path: string,
+  file: string,
+  selection: readonly HunkSelection[],
+): Promise<void> {
+  return invoke<void>('unstage_partial', { path, file, selection })
 }
 
 /**

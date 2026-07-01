@@ -5,6 +5,9 @@ export interface HunkHeaderRow {
   readonly type: 'header'
   readonly key: string
   readonly text: string
+  /** Index of this hunk within the file's `hunks` — the handle a per-hunk stage
+   * action uses to resolve the hunk (its tuple + fingerprint) to (un)stage. */
+  readonly hunkIndex: number
 }
 
 /** A single content row of the diff view, wrapping one {@link DiffLine}. */
@@ -33,7 +36,7 @@ function headerText(hunk: DiffFile['hunks'][number]): string {
 export function flattenHunks(file: DiffFile): DiffRow[] {
   const rows: DiffRow[] = []
   file.hunks.forEach((hunk, h) => {
-    rows.push({ type: 'header', key: `h${h}`, text: headerText(hunk) })
+    rows.push({ type: 'header', key: `h${h}`, text: headerText(hunk), hunkIndex: h })
     hunk.lines.forEach((line, l) => {
       rows.push({ type: 'line', key: `h${h}l${l}`, line })
     })

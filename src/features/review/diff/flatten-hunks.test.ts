@@ -34,8 +34,8 @@ describe('flattenHunks', () => {
   it('emits a header before each hunk, then its lines, in order', () => {
     const rows = flattenHunks(FILE)
     expect(rows.map((r) => r.type)).toEqual(['header', 'line', 'line', 'line', 'header', 'line'])
-    expect(rows[0]).toMatchObject({ type: 'header', text: '@@ -1,2 +1,2 @@' })
-    expect(rows[4]).toMatchObject({ type: 'header', text: '@@ -10,1 +10,1 @@' })
+    expect(rows[0]).toMatchObject({ type: 'header', text: '@@ -1,2 +1,2 @@', hunkIndex: 0 })
+    expect(rows[4]).toMatchObject({ type: 'header', text: '@@ -10,1 +10,1 @@', hunkIndex: 1 })
   })
 
   it('preserves the hunk lines exactly (the fidelity seam)', () => {

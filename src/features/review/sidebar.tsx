@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -11,7 +12,7 @@ import { useRepoStore } from '../../stores/use-repo-store'
 import { useViewStore } from '../../stores/use-view-store'
 import { CompletionBeat } from './completion-beat'
 import { RepoMenu } from './repo-menu'
-import { type ReviewStats, reviewStats } from './review-stats'
+import { partialPaths, type ReviewStats, reviewStats } from './review-stats'
 import { useRowActions } from './row-context'
 import { SidebarFilter } from './sidebar-filter'
 import { StatusSection } from './status-section'
@@ -96,6 +97,9 @@ export function Sidebar({
     restoreFocus()
   }, [status, restoreFocus])
 
+  // Paths in both sections — partially staged — for the quiet "partiel" marker.
+  const partial = useMemo(() => partialPaths(status), [status])
+
   if (!status) {
     return null
   }
@@ -123,6 +127,7 @@ export function Sidebar({
           title="À reviewer"
           section="unstaged"
           entries={status.unstaged}
+          partial={partial}
           query={query}
           mode={mode}
           open={queueOpen}
@@ -134,6 +139,7 @@ export function Sidebar({
           title="Validé"
           section="staged"
           entries={status.staged}
+          partial={partial}
           query={query}
           mode={mode}
           open={validatedOpen}

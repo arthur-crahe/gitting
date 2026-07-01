@@ -33,6 +33,8 @@ interface RowProps {
   section: DiffSection
   /** Step file rows back as done work (the "Validé" archive). */
   recede?: boolean
+  /** Paths that are partially staged (present in both sections). */
+  partial?: ReadonlySet<string>
   /** Directory paths that are currently collapsed. */
   collapsed: ReadonlySet<string>
   /** Flip a directory's collapsed state. */
@@ -45,6 +47,8 @@ interface TreeFileProps {
   depth: number
   section: DiffSection
   recede?: boolean
+  /** The file is partially staged (present in both sections). */
+  partial?: boolean
 }
 
 /**
@@ -52,7 +56,7 @@ interface TreeFileProps {
  * Memoized by value (a status refresh rebuilds the tree nodes), as the flat-list
  * `FileRow` is, so an unchanged leaf and its file-type icon skip re-render.
  */
-const TreeFile = memo(function TreeFile({ node, depth, section, recede }: TreeFileProps) {
+const TreeFile = memo(function TreeFile({ node, depth, section, recede, partial }: TreeFileProps) {
   const { select } = useRowActions()
   const selected = useIsSelected(section, node.entry.path)
   const pending = useRepoStore((s) => s.pendingPaths.has(node.entry.path))
@@ -78,18 +82,24 @@ const TreeFile = memo(function TreeFile({ node, depth, section, recede }: TreeFi
         <FileTypeIcon name={node.name} />
         <span className="tree-file__name">{node.name}</span>
       </button>
+      {partial ? (
+        <span className="review-tag" title="Partiellement validé">
+          partiel
+        </span>
+      ) : null}
       <RowEnd section={section} path={node.entry.path} kind={node.entry.kind} />
     </div>
   )
 }, sameLeaf)
 
-/** Compares leaves by value (path/kind/name/depth/section/recede), so a rebuilt
- * but unchanged node skips re-render; selection and pending come from stores. */
+/** Compares leaves by value (path/kind/name/depth/section/partial/recede), so a
+ * rebuilt but unchanged node skips re-render; selection and pending come from stores. */
 function sameLeaf(prev: TreeFileProps, next: TreeFileProps): boolean {
   return (
     prev.section === next.section &&
     prev.depth === next.depth &&
     prev.recede === next.recede &&
+    prev.partial === next.partial &&
     prev.node.name === next.node.name &&
     prev.node.entry.path === next.node.entry.path &&
     prev.node.entry.kind === next.node.entry.kind
@@ -97,9 +107,17 @@ function sameLeaf(prev: TreeFileProps, next: TreeFileProps): boolean {
 }
 
 /** One tree row: a collapsible directory (with its children) or a file leaf. */
-function NodeRow({ node, depth, section, recede, collapsed, onToggle }: RowProps) {
+function NodeRow({ node, depth, section, recede, partial, collapsed, onToggle }: RowProps) {
   if (node.type === 'file') {
-    return <TreeFile node={node} depth={depth} section={section} recede={recede} />
+    return (
+      <TreeFile
+        node={node}
+        depth={depth}
+        section={section}
+        recede={recede}
+        partial={partial?.has(node.entry.path)}
+      />
+    )
   }
 
   const open = !collapsed.has(node.path)
@@ -125,6 +143,7 @@ function NodeRow({ node, depth, section, recede, collapsed, onToggle }: RowProps
               depth={depth + 1}
               section={section}
               recede={recede}
+              partial={partial}
               collapsed={collapsed}
               onToggle={onToggle}
             />
@@ -147,11 +166,14 @@ export function FileTree({
   entries,
   section,
   recede,
+  partial,
   forceExpand,
 }: {
   entries: readonly StatusEntry[]
   section: DiffSection
   recede?: boolean
+  /** Paths that are partially staged (present in both sections). */
+  partial?: ReadonlySet<string>
   forceExpand?: boolean
 }) {
   const tree = useMemo(() => buildFileTree(entries), [entries])
@@ -178,6 +200,7 @@ export function FileTree({
           depth={0}
           section={section}
           recede={recede}
+          partial={partial}
           collapsed={forceExpand ? NONE : collapsed}
           onToggle={toggle}
         />

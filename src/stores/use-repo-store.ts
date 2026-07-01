@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { toMessage } from '../lib/error'
 import {
+  type HunkSelection,
   openRepo,
   pickRepoDirectory,
   type RepoInfo,
@@ -8,8 +9,10 @@ import {
   readStatus,
   stageFile,
   stageFiles,
+  stagePartial,
   unstageFile,
   unstageFiles,
+  unstagePartial,
 } from '../lib/git'
 import { useDiffStore } from './use-diff-store'
 
@@ -58,6 +61,16 @@ export interface RepoStoreState {
   /** Un-validate `files` in one batch ("tout dévalider"). Resolves like
    * {@link RepoStoreState.stageMany}. */
   unstageMany: (files: readonly string[]) => Promise<boolean>
+  /**
+   * Validate selected hunks of `file` ("valider ce hunk"): stage exactly
+   * `selection`, then refresh — **always**, even on failure, so a stale-diff
+   * rejection reloads the panel and the on-screen stale hunk disappears. Resolves
+   * like {@link RepoStoreState.stage}.
+   */
+  stagePartial: (file: string, selection: readonly HunkSelection[]) => Promise<boolean>
+  /** Un-validate selected staged hunks of `file` ("renvoyer ce hunk en review").
+   * Resolves like {@link RepoStoreState.stagePartial}. */
+  unstagePartial: (file: string, selection: readonly HunkSelection[]) => Promise<boolean>
 }
 
 /**
@@ -135,6 +148,10 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
   unstage: (file) => mutateIndex(get, set, (root) => unstageFile(root, file), [file], false),
   stageMany: (files) => mutateIndex(get, set, stageFiles, files, true),
   unstageMany: (files) => mutateIndex(get, set, unstageFiles, files, false),
+  stagePartial: (file, selection) =>
+    mutateIndex(get, set, (root) => stagePartial(root, file, selection), [file], true, true),
+  unstagePartial: (file, selection) =>
+    mutateIndex(get, set, (root) => unstagePartial(root, file, selection), [file], false, true),
 }))
 
 /**
@@ -155,7 +172,9 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
  * can apply some files before erroring (see `index_write.rs`), so the sidebar
  * must reflect what actually landed rather than stay stale under the error
  * banner. A single-file write is atomic — nothing is staged on failure — so it
- * skips the redundant re-read and just surfaces the error.
+ * skips the redundant re-read and just surfaces the error, **unless**
+ * `alwaysRefresh` is set: a partial (hunk) write rejects a stale selection, and
+ * the panel must then reload so the on-screen stale hunk disappears.
  */
 async function mutateIndex(
   get: () => RepoStoreState,
@@ -163,6 +182,7 @@ async function mutateIndex(
   write: (root: string, files: readonly string[]) => Promise<void>,
   files: readonly string[],
   validated: boolean,
+  alwaysRefresh = false,
 ): Promise<boolean> {
   const { info, pendingPaths } = get()
   if (!info) {
@@ -199,7 +219,7 @@ async function mutateIndex(
     await get().refresh()
     return true
   }
-  if (target.length > 1) {
+  if (target.length > 1 || alwaysRefresh) {
     await get().refresh()
   }
   set({ error: failure })

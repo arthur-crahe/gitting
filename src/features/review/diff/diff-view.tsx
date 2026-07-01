@@ -1,7 +1,10 @@
+import { Tooltip } from '@radix-ui/themes'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { type CSSProperties, useMemo, useRef } from 'react'
-import { DocumentIcon } from '../../../components/icons'
+import { CheckIcon, DocumentIcon, UndoIcon } from '../../../components/icons'
 import type { DiffFile } from '../../../lib/git'
+import type { DiffSection } from '../../../stores/use-diff-store'
+import { useRepoStore } from '../../../stores/use-repo-store'
 import { DiffLineRow } from './diff-line'
 import { flattenHunks } from './flatten-hunks'
 import { langForPath } from './lang'
@@ -61,20 +64,70 @@ function layoutMetrics(file: DiffFile): { maxCols: number; noDigits: number } {
 }
 
 /**
+ * A per-hunk stage/unstage action in the hunk header, revealed on hover. A check
+ * validates the hunk (unstaged section), a back-arrow returns it to review
+ * (staged). Shown only for a modified file; while a partial write on this file is
+ * in flight it is disabled, so a second click can't queue a duplicate. A plain
+ * button (not a Radix `IconButton`) so it fits the fixed 20 px header row.
+ */
+function HunkAction({
+  stage,
+  pending,
+  onClick,
+}: {
+  stage: boolean
+  pending: boolean
+  onClick: () => void
+}) {
+  const label = stage ? 'Valider ce hunk' : 'Renvoyer ce hunk en review'
+  return (
+    <Tooltip content={label}>
+      <button
+        type="button"
+        className="diff-hunk-head__act"
+        tabIndex={-1}
+        aria-label={label}
+        disabled={pending}
+        onClick={onClick}
+      >
+        {stage ? <CheckIcon /> : <UndoIcon />}
+      </button>
+    </Tooltip>
+  )
+}
+
+/**
  * Renders a file's structured diff as a virtualized list of hunk headers and
  * lines: only the rows in view are mounted, so an agent-sized diff of thousands
  * of lines stays responsive. Binary, conflict and mode-only files (no hunks)
  * show a short notice instead.
  *
  * The rows come straight from {@link flattenHunks} over the gix-produced hunks —
- * nothing is re-diffed here, preserving the ADR fidelity invariant.
+ * nothing is re-diffed here, preserving the ADR fidelity invariant. When
+ * `onHunkAction` is supplied and the file is modified, each hunk header carries a
+ * hover-revealed stage/unstage action for that hunk (`section` picks the
+ * direction); it is absent for non-modified files, which stage whole-file.
  */
-export function DiffView({ file }: { file: DiffFile }) {
+export function DiffView({
+  file,
+  section,
+  onHunkAction,
+}: {
+  file: DiffFile
+  /** Which section the file is open from — picks the hunk action's direction. */
+  section?: DiffSection
+  /** Stage/unstage the hunk at the given index; omit to hide per-hunk actions. */
+  onHunkAction?: (hunkIndex: number) => void
+}) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const highlighter = useHighlighter()
   const lang = useMemo(() => langForPath(file.path), [file.path])
   const rows = useMemo(() => flattenHunks(file), [file])
   const { maxCols, noDigits } = useMemo(() => layoutMetrics(file), [file])
+  // File-level pending: a partial write marks the whole path, disabling every
+  // hunk action on it while the write is in flight.
+  const pending = useRepoStore((s) => s.pendingPaths.has(file.path))
+  const hunkActions = onHunkAction !== undefined && file.changeKind === 'modified'
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
@@ -124,9 +177,18 @@ export function DiffView({ file }: { file: DiffFile }) {
             <div key={row.key} className="diff-row" style={{ top: item.start }}>
               {row.type === 'header' ? (
                 <div className="diff-hunk-head">
-                  {/* Pinned to the left edge so the hunk range stays read-able
-                      while the code scrolls horizontally (like the line gutter). */}
-                  <span className="diff-hunk-head__text">{row.text}</span>
+                  {/* Pinned to the left edge so the hunk range (and its action)
+                      stay read-able while the code scrolls horizontally. */}
+                  <span className="diff-hunk-head__sticky">
+                    <span className="diff-hunk-head__text">{row.text}</span>
+                    {hunkActions && onHunkAction ? (
+                      <HunkAction
+                        stage={section === 'unstaged'}
+                        pending={pending}
+                        onClick={() => onHunkAction(row.hunkIndex)}
+                      />
+                    ) : null}
+                  </span>
                 </div>
               ) : (
                 <DiffLineRow line={row.line} highlighter={highlighter} lang={lang} />

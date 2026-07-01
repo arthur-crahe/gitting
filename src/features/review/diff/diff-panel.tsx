@@ -1,6 +1,8 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { DocumentIcon } from '../../../components/icons'
 import { countDiffLines } from '../../../lib/diff-stats'
+import type { HunkSelection } from '../../../lib/git'
+import { hunkFingerprint } from '../../../lib/hunk-fingerprint'
 import { useDiffStore } from '../../../stores/use-diff-store'
 import { useRepoStore } from '../../../stores/use-repo-store'
 import { CompletionBeat } from '../completion-beat'
@@ -51,8 +53,39 @@ export function DiffPanel() {
   const diff = useDiffStore((s) => s.diff)
   const phase = useDiffStore((s) => s.phase)
   const error = useDiffStore((s) => s.error)
+  const stagePartial = useRepoStore((s) => s.stagePartial)
+  const unstagePartial = useRepoStore((s) => s.unstagePartial)
   // Summed once per loaded diff, not on every render (loading→ready, selection).
   const stat = useMemo(() => (diff && diff.hunks.length > 0 ? countDiffLines(diff) : null), [diff])
+
+  // Stage (or unstage) one whole hunk of the open file: build its selection —
+  // header tuple + the WYSIWYG fingerprint of the rendered hunk — and route it by
+  // section. The store refreshes afterwards (even on a stale-diff rejection), so
+  // the panel reloads with the shrunken diff or the surfaced error.
+  const onHunkAction = useCallback(
+    (hunkIndex: number) => {
+      if (!diff || !selected) {
+        return
+      }
+      const hunk = diff.hunks[hunkIndex]
+      if (!hunk) {
+        return
+      }
+      const selection: HunkSelection = {
+        hunk: hunkIndex,
+        oldStart: hunk.oldStart,
+        oldLines: hunk.oldLines,
+        newStart: hunk.newStart,
+        newLines: hunk.newLines,
+        fingerprint: hunkFingerprint(hunk),
+        lines: null,
+      }
+      void (selected.section === 'unstaged'
+        ? stagePartial(selected.path, [selection])
+        : unstagePartial(selected.path, [selection]))
+    },
+    [diff, selected, stagePartial, unstagePartial],
+  )
 
   if (!selected) {
     return <EmptyPane />
@@ -87,7 +120,7 @@ export function DiffPanel() {
             <span className="diff-notice__text diff-notice__text--error">{error}</span>
           </div>
         ) : diff ? (
-          <DiffView file={diff} />
+          <DiffView file={diff} section={selected.section} onHunkAction={onHunkAction} />
         ) : phase === 'loading' ? (
           <div className="diff-notice">
             <span className="diff-notice__text">Chargement…</span>
