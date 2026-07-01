@@ -4,6 +4,12 @@ Notes de version de Gitting, de la plus récente à la plus ancienne, à destina
 
 <!-- release:anchor — /release inserts the new version section directly below this line -->
 
+## [0.7.0] - 2026-07-01
+
+### Nouveautés
+- Validation par bloc : valider — ou renvoyer en review — un bloc de modifications (hunk) précis d'un fichier, sans traiter tout le fichier d'un coup. L'action apparaît au survol de l'en-tête d'un bloc dans le diff.
+- Un fichier partiellement validé apparaît désormais dans les deux sections à la fois, marqué « partiel » ; la progression le compte comme restant à reviewer tant qu'il lui reste des blocs.
+
 ## [0.6.1] - 2026-06-30
 
 ### Corrections
