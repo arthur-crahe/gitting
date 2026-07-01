@@ -15,6 +15,11 @@ export interface LineRow {
   readonly type: 'line'
   readonly key: string
   readonly line: DiffLine
+  /** Index of the owning hunk within the file's `hunks`. */
+  readonly hunkIndex: number
+  /** Index of this line within its hunk's `lines` — the handle a line-level
+   * selection uses to (un)stage individual lines. */
+  readonly lineIndex: number
 }
 
 /** A flattened, render-ready row of the diff view. */
@@ -38,7 +43,7 @@ export function flattenHunks(file: DiffFile): DiffRow[] {
   file.hunks.forEach((hunk, h) => {
     rows.push({ type: 'header', key: `h${h}`, text: headerText(hunk), hunkIndex: h })
     hunk.lines.forEach((line, l) => {
-      rows.push({ type: 'line', key: `h${h}l${l}`, line })
+      rows.push({ type: 'line', key: `h${h}l${l}`, line, hunkIndex: h, lineIndex: l })
     })
   })
   return rows

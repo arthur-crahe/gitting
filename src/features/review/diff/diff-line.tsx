@@ -21,10 +21,19 @@ export function DiffLineRow({
   line,
   highlighter,
   lang,
+  selectable = false,
+  selected = false,
+  onToggle,
 }: {
   line: DiffLine
   highlighter: HighlighterCore | null
   lang: string | null
+  /** Whether this changed line can be picked for line-level staging. */
+  selectable?: boolean
+  /** Whether it is currently in the selection. */
+  selected?: boolean
+  /** Toggle this line; `extend` (Shift-click) selects the range from the anchor. */
+  onToggle?: (extend: boolean) => void
 }) {
   const [, recolor] = useReducer((n: number) => n + 1, 0)
 
@@ -48,15 +57,32 @@ export function DiffLineRow({
   }, [highlighter, lang, line.content])
 
   return (
-    <div className={`diff-line diff-line--${line.kind}`}>
+    <div className={`diff-line diff-line--${line.kind}`} data-selected={selected || undefined}>
       {/* The gutter (line numbers + sign) is one sticky unit, pinned to the left
           edge so it stays read-able while the code scrolls horizontally under it. */}
       <span className="diff-line__gutter">
         <span className="diff-line__no">{line.oldNo ?? ''}</span>
         <span className="diff-line__no">{line.newNo ?? ''}</span>
-        <span className="diff-line__sign" aria-hidden="true">
-          {SIGN[line.kind]}
-        </span>
+        {selectable && onToggle ? (
+          // The sign doubles as the selection toggle: it lights up on hover and
+          // clicking it (Shift-click to extend a range) picks the line for
+          // line-level staging — no extra gutter column, so the width math and
+          // the fixed row height are untouched.
+          <button
+            type="button"
+            className="diff-line__sign diff-line__sign--toggle"
+            tabIndex={-1}
+            aria-label={selected ? 'Désélectionner la ligne' : 'Sélectionner la ligne'}
+            aria-pressed={selected}
+            onClick={(event) => onToggle(event.shiftKey)}
+          >
+            {SIGN[line.kind]}
+          </button>
+        ) : (
+          <span className="diff-line__sign" aria-hidden="true">
+            {SIGN[line.kind]}
+          </span>
+        )}
       </span>
       <code className="diff-line__content">
         {tokens

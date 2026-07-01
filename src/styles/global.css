@@ -1588,6 +1588,39 @@ button.review-section__head:hover .disclosure-chevron {
   box-shadow: inset 1px 0 var(--red-a5);
 }
 
+/* The sign cell doubles as the line-selection toggle for changed lines: it keeps
+ * the add/delete sign styling (inherited via .diff-line__sign) and lights up on
+ * hover, so picking a line is discoverable. A plain button reset so it fills the
+ * 2ch sign cell exactly like the span — no new column, row height untouched. */
+.diff-line__sign--toggle {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  background: transparent;
+  cursor: default;
+}
+
+.diff-line__sign--toggle:hover {
+  background: var(--accent-a4);
+}
+
+.diff-line__sign--toggle:focus-visible {
+  outline: 2px solid var(--accent-8);
+  outline-offset: -2px;
+}
+
+/* A selected line: the gutter rail switches to the accent (over the add/delete
+ * wash) and the toggle fills with accent, so the picked lines are unmistakable. */
+.diff-line[data-selected] .diff-line__gutter {
+  box-shadow: inset 2px 0 var(--accent-9);
+}
+
+.diff-line[data-selected] .diff-line__sign--toggle {
+  background: var(--accent-a5);
+  color: var(--accent-12);
+}
+
 /* ── Menus / overlays ──────────────────────────────────────────────────────────
  * The only floating surfaces carry the single shadow token (the design system's
  * "overlays only" elevation), replacing Radix's default popover shadow. */

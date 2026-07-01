@@ -112,12 +112,18 @@ export function DiffView({
   file,
   section,
   onHunkAction,
+  selection,
+  onToggleLine,
 }: {
   file: DiffFile
   /** Which section the file is open from — picks the hunk action's direction. */
   section?: DiffSection
   /** Stage/unstage the hunk at the given index; omit to hide per-hunk actions. */
   onHunkAction?: (hunkIndex: number) => void
+  /** Currently-selected line indices per hunk (for line-level staging). */
+  selection?: ReadonlyMap<number, ReadonlySet<number>>
+  /** Toggle a line's selection; `extend` (Shift-click) selects a range. */
+  onToggleLine?: (hunkIndex: number, lineIndex: number, extend: boolean) => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const highlighter = useHighlighter()
@@ -127,7 +133,12 @@ export function DiffView({
   // File-level pending: a partial write marks the whole path, disabling every
   // hunk action on it while the write is in flight.
   const pending = useRepoStore((s) => s.pendingPaths.has(file.path))
-  const hunkActions = onHunkAction !== undefined && file.changeKind === 'modified'
+  // Partial staging applies to a modified file (patched in place) or a new,
+  // untracked file (created in the index from its selected lines). Every other
+  // kind stages whole-file, so its hunks carry no per-hunk/line actions.
+  const partialEligible = file.changeKind === 'modified' || file.changeKind === 'untracked'
+  const hunkActions = onHunkAction !== undefined && partialEligible
+  const lineSelectable = onToggleLine !== undefined && partialEligible
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
@@ -191,7 +202,18 @@ export function DiffView({
                   </span>
                 </div>
               ) : (
-                <DiffLineRow line={row.line} highlighter={highlighter} lang={lang} />
+                <DiffLineRow
+                  line={row.line}
+                  highlighter={highlighter}
+                  lang={lang}
+                  selectable={lineSelectable && row.line.kind !== 'context'}
+                  selected={selection?.get(row.hunkIndex)?.has(row.lineIndex) ?? false}
+                  onToggle={
+                    lineSelectable
+                      ? (extend) => onToggleLine?.(row.hunkIndex, row.lineIndex, extend)
+                      : undefined
+                  }
+                />
               )}
             </div>
           )
