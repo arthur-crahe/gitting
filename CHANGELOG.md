@@ -4,6 +4,12 @@ Notes de version de Gitting, de la plus récente à la plus ancienne, à destina
 
 <!-- release:anchor — /release inserts the new version section directly below this line -->
 
+## [0.8.0] - 2026-07-01
+
+### Nouveautés
+- Validation par ligne : choisir les lignes précises d'un bloc à valider (ou renvoyer en review). Le signe +/− à côté du numéro s'allume au survol ; clic pour cocher, Shift-clic pour une plage, puis « Valider les lignes sélectionnées ».
+- Les fichiers nouveaux (non suivis) se valident aussi par bloc ou par ligne : seules les lignes choisies entrent dans l'index.
+
 ## [0.7.0] - 2026-07-01
 
 ### Nouveautés
