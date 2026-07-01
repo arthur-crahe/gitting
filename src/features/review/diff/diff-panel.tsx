@@ -2,7 +2,7 @@ import { Button } from '@radix-ui/themes'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DocumentIcon } from '../../../components/icons'
 import { countDiffLines } from '../../../lib/diff-stats'
-import type { HunkSelection } from '../../../lib/git'
+import type { DiffLine, Hunk, HunkSelection } from '../../../lib/git'
 import { hunkFingerprint } from '../../../lib/hunk-fingerprint'
 import { useDiffStore } from '../../../stores/use-diff-store'
 import { useRepoStore } from '../../../stores/use-repo-store'
@@ -11,6 +11,51 @@ import { reviewStats } from '../review-stats'
 import { StatusGlyph } from '../status-glyph'
 import { ValidateButton } from '../validate-button'
 import { DiffView } from './diff-view'
+
+/** The three partial operations on a hunk/line selection. */
+export type PartialOp = 'stage' | 'unstage' | 'discard'
+
+/** Builds the wire selection for one hunk — its header tuple + WYSIWYG
+ * fingerprint — taking the given `lines` (`null` = the whole hunk). */
+function hunkSelection(hunk: Hunk, hunkIndex: number, lines: number[] | null): HunkSelection {
+  return {
+    hunk: hunkIndex,
+    oldStart: hunk.oldStart,
+    oldLines: hunk.oldLines,
+    newStart: hunk.newStart,
+    newLines: hunk.newLines,
+    fingerprint: hunkFingerprint(hunk),
+    lines,
+  }
+}
+
+/** Whether a line is a change (add/delete), i.e. selectable/actionable. */
+function isChange(line: DiffLine | undefined): boolean {
+  return line !== undefined && line.kind !== 'context'
+}
+
+/** The contiguous run of changed lines containing `lineIndex` — the "change
+ * block" a per-line action operates on, so a modification's − and + are always
+ * (un)done together (a lone changed line is just itself). */
+function blockLines(hunk: Hunk, lineIndex: number): number[] {
+  const lines = hunk.lines
+  if (!isChange(lines[lineIndex])) {
+    return [lineIndex]
+  }
+  let lo = lineIndex
+  let hi = lineIndex
+  while (lo > 0 && isChange(lines[lo - 1])) {
+    lo -= 1
+  }
+  while (hi < lines.length - 1 && isChange(lines[hi + 1])) {
+    hi += 1
+  }
+  const out: number[] = []
+  for (let i = lo; i <= hi; i++) {
+    out.push(i)
+  }
+  return out
+}
 
 /**
  * The empty right pane (nothing selected). Doubles as the completion surface: when
@@ -56,6 +101,7 @@ export function DiffPanel() {
   const error = useDiffStore((s) => s.error)
   const stagePartial = useRepoStore((s) => s.stagePartial)
   const unstagePartial = useRepoStore((s) => s.unstagePartial)
+  const discardPartial = useRepoStore((s) => s.discardPartial)
   // Summed once per loaded diff, not on every render (loading→ready, selection).
   const stat = useMemo(() => (diff && diff.hunks.length > 0 ? countDiffLines(diff) : null), [diff])
 
@@ -119,64 +165,66 @@ export function DiffPanel() {
     return total
   }, [selection])
 
-  // Validate exactly the selected lines: one HunkSelection per touched hunk, each
-  // carrying its line indices + the WYSIWYG fingerprint. The selection clears on
-  // the diff reload that follows a successful write.
-  const onValidateSelection = useCallback(() => {
-    if (!diff || !selected || selection.size === 0) {
-      return
-    }
-    const selections: HunkSelection[] = []
-    for (const [hunkIndex, lines] of selection) {
-      const hunk = diff.hunks[hunkIndex]
-      if (!hunk || lines.size === 0) {
-        continue
-      }
-      selections.push({
-        hunk: hunkIndex,
-        oldStart: hunk.oldStart,
-        oldLines: hunk.oldLines,
-        newStart: hunk.newStart,
-        newLines: hunk.newLines,
-        fingerprint: hunkFingerprint(hunk),
-        lines: [...lines].sort((a, b) => a - b),
-      })
-    }
-    if (selections.length === 0) {
-      return
-    }
-    void (selected.section === 'unstaged'
-      ? stagePartial(selected.path, selections)
-      : unstagePartial(selected.path, selections))
-  }, [diff, selected, selection, stagePartial, unstagePartial])
-
-  // Stage (or unstage) one whole hunk of the open file: build its selection —
-  // header tuple + the WYSIWYG fingerprint of the rendered hunk — and route it by
-  // section. The store refreshes afterwards (even on a stale-diff rejection), so
-  // the panel reloads with the shrunken diff or the surfaced error.
-  const onHunkAction = useCallback(
-    (hunkIndex: number) => {
-      if (!diff || !selected) {
+  // The store action for each op. The store refreshes after every write (even on
+  // a stale-diff rejection or a failed discard), so the panel reloads with the
+  // shrunken diff or the surfaced error; the selection clears on that reload.
+  const runSelections = useCallback(
+    (op: PartialOp, selections: HunkSelection[]) => {
+      if (!selected || selections.length === 0) {
         return
       }
-      const hunk = diff.hunks[hunkIndex]
-      if (!hunk) {
-        return
-      }
-      const selection: HunkSelection = {
-        hunk: hunkIndex,
-        oldStart: hunk.oldStart,
-        oldLines: hunk.oldLines,
-        newStart: hunk.newStart,
-        newLines: hunk.newLines,
-        fingerprint: hunkFingerprint(hunk),
-        lines: null,
-      }
-      void (selected.section === 'unstaged'
-        ? stagePartial(selected.path, [selection])
-        : unstagePartial(selected.path, [selection]))
+      const action =
+        op === 'stage' ? stagePartial : op === 'unstage' ? unstagePartial : discardPartial
+      void action(selected.path, selections)
     },
-    [diff, selected, stagePartial, unstagePartial],
+    [selected, stagePartial, unstagePartial, discardPartial],
+  )
+
+  // Whole hunk (the hunk-header buttons).
+  const onHunkOp = useCallback(
+    (hunkIndex: number, op: PartialOp) => {
+      const hunk = diff?.hunks[hunkIndex]
+      if (hunk) {
+        runSelections(op, [hunkSelection(hunk, hunkIndex, null)])
+      }
+    },
+    [diff, runSelections],
+  )
+
+  // One line's change block (the per-line hover buttons) — acts immediately.
+  const onLineOp = useCallback(
+    (hunkIndex: number, lineIndex: number, op: PartialOp) => {
+      const hunk = diff?.hunks[hunkIndex]
+      if (hunk) {
+        runSelections(op, [hunkSelection(hunk, hunkIndex, blockLines(hunk, lineIndex))])
+      }
+    },
+    [diff, runSelections],
+  )
+
+  // The multi-line selection (the "N lignes" header buttons): one HunkSelection
+  // per touched hunk, carrying its sorted line indices.
+  const onSelectionOp = useCallback(
+    (op: PartialOp) => {
+      if (!diff) {
+        return
+      }
+      const selections: HunkSelection[] = []
+      for (const [hunkIndex, lines] of selection) {
+        const hunk = diff.hunks[hunkIndex]
+        if (hunk && lines.size > 0) {
+          selections.push(
+            hunkSelection(
+              hunk,
+              hunkIndex,
+              [...lines].sort((a, b) => a - b),
+            ),
+          )
+        }
+      }
+      runSelections(op, selections)
+    },
+    [diff, selection, runSelections],
   )
 
   if (!selected) {
@@ -194,10 +242,25 @@ export function DiffPanel() {
         </span>
         <span className="diff-panel__end">
           {selectedCount > 0 ? (
-            <Button size="1" variant="soft" onClick={onValidateSelection}>
-              {selected.section === 'unstaged' ? 'Valider' : 'Renvoyer'} {selectedCount} ligne
-              {selectedCount > 1 ? 's' : ''}
-            </Button>
+            selected.section === 'unstaged' ? (
+              <>
+                <Button size="1" variant="soft" onClick={() => onSelectionOp('stage')}>
+                  Valider {selectedCount} ligne{selectedCount > 1 ? 's' : ''}
+                </Button>
+                <Button
+                  size="1"
+                  variant="soft"
+                  color="red"
+                  onClick={() => onSelectionOp('discard')}
+                >
+                  Rejeter
+                </Button>
+              </>
+            ) : (
+              <Button size="1" variant="soft" onClick={() => onSelectionOp('unstage')}>
+                Renvoyer {selectedCount} ligne{selectedCount > 1 ? 's' : ''}
+              </Button>
+            )
           ) : null}
           {stat ? (
             <span className="diff-stat">
@@ -221,7 +284,8 @@ export function DiffPanel() {
           <DiffView
             file={diff}
             section={selected.section}
-            onHunkAction={onHunkAction}
+            onHunkOp={onHunkOp}
+            onLineOp={onLineOp}
             selection={selection}
             onToggleLine={onToggleLine}
           />

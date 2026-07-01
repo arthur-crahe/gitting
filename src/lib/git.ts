@@ -213,6 +213,22 @@ export function unstagePartial(
 }
 
 /**
+ * Discards selected hunks/lines of `file` ("rejeter"): reverts them in the
+ * working tree via `git apply --reverse`. **Destructive and irreversible** — the
+ * thrown-away change cannot be recovered.
+ *
+ * @throws if a selection is stale, the file is not a modified file, or the write
+ *   fails.
+ */
+export function discardPartial(
+  path: string,
+  file: string,
+  selection: readonly HunkSelection[],
+): Promise<void> {
+  return invoke<void>('discard_partial', { path, file, selection })
+}
+
+/**
  * Prompts for a directory to open as the repository.
  *
  * @returns the chosen absolute path, or `null` if the dialog was cancelled.

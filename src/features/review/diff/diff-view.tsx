@@ -1,11 +1,12 @@
 import { Tooltip } from '@radix-ui/themes'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { type CSSProperties, useMemo, useRef } from 'react'
-import { CheckIcon, DocumentIcon, UndoIcon } from '../../../components/icons'
+import { type CSSProperties, type ReactNode, useMemo, useRef } from 'react'
+import { CheckIcon, DocumentIcon, UndoIcon, XIcon } from '../../../components/icons'
 import type { DiffFile } from '../../../lib/git'
 import type { DiffSection } from '../../../stores/use-diff-store'
 import { useRepoStore } from '../../../stores/use-repo-store'
 import { DiffLineRow } from './diff-line'
+import type { PartialOp } from './diff-panel'
 import { flattenHunks } from './flatten-hunks'
 import { langForPath } from './lang'
 import { useHighlighter } from './use-highlighter'
@@ -64,35 +65,75 @@ function layoutMetrics(file: DiffFile): { maxCols: number; noDigits: number } {
 }
 
 /**
- * A per-hunk stage/unstage action in the hunk header, revealed on hover. A check
- * validates the hunk (unstaged section), a back-arrow returns it to review
- * (staged). Shown only for a modified file; while a partial write on this file is
- * in flight it is disabled, so a second click can't queue a duplicate. A plain
- * button (not a Radix `IconButton`) so it fits the fixed 20 px header row.
+ * A compact hover-revealed action button that fits the fixed diff row height. A
+ * plain button (not a Radix `IconButton`) so it stays within the 20 px row; while
+ * a partial write on this file is in flight it is disabled, so a second click
+ * can't queue a duplicate.
  */
-function HunkAction({
-  stage,
+function ActButton({
+  label,
+  danger,
   pending,
   onClick,
+  children,
 }: {
-  stage: boolean
+  label: string
+  danger?: boolean
   pending: boolean
   onClick: () => void
+  children: ReactNode
 }) {
-  const label = stage ? 'Valider ce hunk' : 'Renvoyer ce hunk en review'
   return (
     <Tooltip content={label}>
       <button
         type="button"
-        className="diff-hunk-head__act"
+        className={danger ? 'diff-act diff-act--danger' : 'diff-act'}
         tabIndex={-1}
         aria-label={label}
         disabled={pending}
         onClick={onClick}
       >
-        {stage ? <CheckIcon /> : <UndoIcon />}
+        {children}
       </button>
     </Tooltip>
+  )
+}
+
+/**
+ * The direct actions for one hunk (or one line's change block), revealed on hover
+ * and acting **immediately**: Valider (stage) + Rejeter (discard — reverts the
+ * change on disk) when unstaged, Annuler (unstage) when staged.
+ */
+function PartialActions({
+  section,
+  pending,
+  onOp,
+}: {
+  section: DiffSection | undefined
+  pending: boolean
+  onOp: (op: PartialOp) => void
+}) {
+  if (section === 'staged') {
+    return (
+      <ActButton label="Renvoyer en review" pending={pending} onClick={() => onOp('unstage')}>
+        <UndoIcon />
+      </ActButton>
+    )
+  }
+  return (
+    <>
+      <ActButton label="Valider" pending={pending} onClick={() => onOp('stage')}>
+        <CheckIcon />
+      </ActButton>
+      <ActButton
+        label="Rejeter — annule la modification dans le fichier"
+        danger
+        pending={pending}
+        onClick={() => onOp('discard')}
+      >
+        <XIcon />
+      </ActButton>
+    </>
   )
 }
 
@@ -103,24 +144,28 @@ function HunkAction({
  * show a short notice instead.
  *
  * The rows come straight from {@link flattenHunks} over the gix-produced hunks —
- * nothing is re-diffed here, preserving the ADR fidelity invariant. When
- * `onHunkAction` is supplied and the file is modified, each hunk header carries a
- * hover-revealed stage/unstage action for that hunk (`section` picks the
- * direction); it is absent for non-modified files, which stage whole-file.
+ * nothing is re-diffed here, preserving the ADR fidelity invariant. For a modified
+ * or new file, each hunk header and each changed line carries hover-revealed,
+ * immediate actions (`section` picks stage/discard vs unstage); they are absent
+ * for other kinds, which stage whole-file. The line-selection toggle (for the
+ * multi-line "N lignes" batch) is independent of these direct actions.
  */
 export function DiffView({
   file,
   section,
-  onHunkAction,
+  onHunkOp,
+  onLineOp,
   selection,
   onToggleLine,
 }: {
   file: DiffFile
-  /** Which section the file is open from — picks the hunk action's direction. */
+  /** Which section the file is open from — picks the action direction. */
   section?: DiffSection
-  /** Stage/unstage the hunk at the given index; omit to hide per-hunk actions. */
-  onHunkAction?: (hunkIndex: number) => void
-  /** Currently-selected line indices per hunk (for line-level staging). */
+  /** Run an op on a whole hunk; omit to hide the hunk-header actions. */
+  onHunkOp?: (hunkIndex: number, op: PartialOp) => void
+  /** Run an op on one line's change block; omit to hide the per-line actions. */
+  onLineOp?: (hunkIndex: number, lineIndex: number, op: PartialOp) => void
+  /** Currently-selected line indices per hunk (for the multi-line batch). */
   selection?: ReadonlyMap<number, ReadonlySet<number>>
   /** Toggle a line's selection; `extend` (Shift-click) selects a range. */
   onToggleLine?: (hunkIndex: number, lineIndex: number, extend: boolean) => void
@@ -137,7 +182,8 @@ export function DiffView({
   // untracked file (created in the index from its selected lines). Every other
   // kind stages whole-file, so its hunks carry no per-hunk/line actions.
   const partialEligible = file.changeKind === 'modified' || file.changeKind === 'untracked'
-  const hunkActions = onHunkAction !== undefined && partialEligible
+  const hunkActions = onHunkOp !== undefined && partialEligible
+  const lineActions = onLineOp !== undefined && partialEligible
   const lineSelectable = onToggleLine !== undefined && partialEligible
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -192,12 +238,14 @@ export function DiffView({
                       stay read-able while the code scrolls horizontally. */}
                   <span className="diff-hunk-head__sticky">
                     <span className="diff-hunk-head__text">{row.text}</span>
-                    {hunkActions && onHunkAction ? (
-                      <HunkAction
-                        stage={section === 'unstaged'}
-                        pending={pending}
-                        onClick={() => onHunkAction(row.hunkIndex)}
-                      />
+                    {hunkActions ? (
+                      <span className="diff-act-group">
+                        <PartialActions
+                          section={section}
+                          pending={pending}
+                          onOp={(op) => onHunkOp?.(row.hunkIndex, op)}
+                        />
+                      </span>
                     ) : null}
                   </span>
                 </div>
@@ -212,6 +260,15 @@ export function DiffView({
                     lineSelectable
                       ? (extend) => onToggleLine?.(row.hunkIndex, row.lineIndex, extend)
                       : undefined
+                  }
+                  actions={
+                    lineActions && row.line.kind !== 'context' ? (
+                      <PartialActions
+                        section={section}
+                        pending={pending}
+                        onOp={(op) => onLineOp?.(row.hunkIndex, row.lineIndex, op)}
+                      />
+                    ) : null
                   }
                 />
               )}

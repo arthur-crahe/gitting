@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { toMessage } from '../lib/error'
 import {
+  discardPartial,
   type HunkSelection,
   openRepo,
   pickRepoDirectory,
@@ -71,6 +72,13 @@ export interface RepoStoreState {
   /** Un-validate selected staged hunks of `file` ("renvoyer ce hunk en review").
    * Resolves like {@link RepoStoreState.stagePartial}. */
   unstagePartial: (file: string, selection: readonly HunkSelection[]) => Promise<boolean>
+  /**
+   * Discard selected hunks/lines of `file` ("rejeter"): revert them in the
+   * working tree. **Destructive** — the change is not recoverable. Refreshes even
+   * on failure, like the other partial ops. Resolves like
+   * {@link RepoStoreState.stagePartial}.
+   */
+  discardPartial: (file: string, selection: readonly HunkSelection[]) => Promise<boolean>
 }
 
 /**
@@ -152,6 +160,8 @@ export const useRepoStore = create<RepoStoreState>((set, get) => ({
     mutateIndex(get, set, (root) => stagePartial(root, file, selection), [file], true, true),
   unstagePartial: (file, selection) =>
     mutateIndex(get, set, (root) => unstagePartial(root, file, selection), [file], false, true),
+  discardPartial: (file, selection) =>
+    mutateIndex(get, set, (root) => discardPartial(root, file, selection), [file], false, true),
 }))
 
 /**

@@ -1453,10 +1453,10 @@ button.review-section__head:hover .disclosure-chevron {
   display: inline-block;
 }
 
-/* The per-hunk stage/unstage action: a compact ghost button that fits the fixed
- * 20px header row, revealed on hover (or keyboard focus) so idle headers stay
- * calm. Disabled — dimmed — while a partial write on this file is in flight. */
-.diff-hunk-head__act {
+/* A compact ghost action button (hunk header or line) that fits the fixed 20px
+ * row: Valider/Annuler in accent, Rejeter in red. Disabled — dimmed — while a
+ * partial write on this file is in flight. */
+.diff-act {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1468,31 +1468,69 @@ button.review-section__head:hover .disclosure-chevron {
   background: none;
   color: var(--accent-a11);
   cursor: default;
-  opacity: 0;
   transition:
-    opacity var(--dur-selection) var(--ease-out),
     background-color var(--dur-selection) var(--ease-out),
     color var(--dur-selection) var(--ease-out);
 }
 
-.diff-hunk-head:hover .diff-hunk-head__act,
-.diff-hunk-head__act:focus-visible {
-  opacity: 1;
-}
-
-.diff-hunk-head__act:hover {
+.diff-act:hover {
   background: var(--accent-a4);
   color: var(--accent-12);
 }
 
-.diff-hunk-head__act:focus-visible {
+.diff-act--danger {
+  color: var(--red-a11);
+}
+
+.diff-act--danger:hover {
+  background: var(--red-a4);
+  color: var(--red-12);
+}
+
+.diff-act:focus-visible {
   outline: 2px solid var(--accent-8);
   outline-offset: -2px;
 }
 
-.diff-hunk-head__act:disabled {
+.diff-act:disabled {
   opacity: 0.4;
-  cursor: default;
+}
+
+/* The hunk-header action group, revealed on hover (or keyboard focus) so idle
+ * headers stay calm. */
+.diff-act-group {
+  display: inline-flex;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity var(--dur-selection) var(--ease-out);
+}
+
+.diff-hunk-head:hover .diff-act-group,
+.diff-act-group:focus-within {
+  opacity: 1;
+}
+
+/* The per-line action overlay: anchored to the RIGHT edge of the sticky gutter,
+ * so it stays visible while the code scrolls horizontally, and revealed on row
+ * hover. Its own opaque surface hides the code passing beneath it. */
+.diff-line__acts {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 3px;
+  background: var(--gtg-surface);
+  box-shadow: 1px 0 3px var(--gray-a5);
+  opacity: 0;
+  transition: opacity var(--dur-selection) var(--ease-out);
+}
+
+.diff-line:hover .diff-line__acts,
+.diff-line__acts:focus-within {
+  opacity: 1;
 }
 
 .diff-line {

@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useReducer } from 'react'
+import { type CSSProperties, type ReactNode, useEffect, useReducer } from 'react'
 import type { HighlighterCore } from 'shiki/core'
 import type { DiffLine } from '../../../lib/git'
 import { cachedTokens, tokenizeLineCached } from './tokenize'
@@ -24,6 +24,7 @@ export function DiffLineRow({
   selectable = false,
   selected = false,
   onToggle,
+  actions,
 }: {
   line: DiffLine
   highlighter: HighlighterCore | null
@@ -34,6 +35,8 @@ export function DiffLineRow({
   selected?: boolean
   /** Toggle this line; `extend` (Shift-click) selects the range from the anchor. */
   onToggle?: (extend: boolean) => void
+  /** Direct hover actions (Valider/Rejeter/Annuler) for this line's change block. */
+  actions?: ReactNode
 }) {
   const [, recolor] = useReducer((n: number) => n + 1, 0)
 
@@ -83,6 +86,7 @@ export function DiffLineRow({
             {SIGN[line.kind]}
           </span>
         )}
+        {actions ? <span className="diff-line__acts">{actions}</span> : null}
       </span>
       <code className="diff-line__content">
         {tokens
