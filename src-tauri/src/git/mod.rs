@@ -9,7 +9,9 @@
 
 mod diff;
 mod error;
+mod hunk_patch;
 mod index_write;
+mod partial;
 mod repo;
 mod status;
 
@@ -19,10 +21,11 @@ mod test_support;
 pub use diff::{diff_staged, diff_unstaged};
 pub use error::GitError;
 pub use index_write::{stage_file, stage_files, unstage_file, unstage_files};
+pub use partial::{stage_partial, unstage_partial};
 pub use repo::open_repo;
 pub use status::read_status;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// How a file changed, mirrored as a TypeScript union on the frontend.
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -145,6 +148,34 @@ pub struct DiffFile {
     /// The diff hunks, in file order; empty for a binary, conflict, submodule or
     /// mode-only file.
     pub hunks: Vec<Hunk>,
+}
+
+/// A structural selection of one hunk to (un)stage, sent from the frontend. It
+/// indexes a *freshly re-diffed* [`DiffFile`]; the backend re-derives the diff and
+/// validates the selection before touching the index.
+///
+/// The four `*_start`/`*_lines` fields locate and sanity-check the hunk, but the
+/// real staleness guard is `fingerprint` — a content hash of the rendered hunk's
+/// `"{sign}{content}"` lines that a same-count re-edit cannot preserve, protecting
+/// the "what you saw is what you stage" invariant the header tuple alone cannot.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HunkSelection {
+    /// Index of the hunk within the file's `hunks`.
+    pub hunk: u32,
+    /// The hunk header's old-side start line.
+    pub old_start: u32,
+    /// The hunk header's old-side line count.
+    pub old_lines: u32,
+    /// The hunk header's new-side start line.
+    pub new_start: u32,
+    /// The hunk header's new-side line count.
+    pub new_lines: u32,
+    /// Content hash of the rendered hunk — the WYSIWYG staleness guard.
+    pub fingerprint: String,
+    /// Selected line indices within the hunk for line-level staging (v2); `None`
+    /// means the whole hunk (v1). A `Some` value is rejected until v2 lands.
+    pub lines: Option<Vec<u32>>,
 }
 
 #[cfg(test)]

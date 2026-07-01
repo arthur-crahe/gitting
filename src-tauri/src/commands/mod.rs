@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use crate::git::{self, DiffFile, GitError, RepoInfo, RepoStatus};
+use crate::git::{self, DiffFile, GitError, HunkSelection, RepoInfo, RepoStatus};
 
 /// Opens the repository enclosing `path` and returns its identity.
 #[tauri::command]
@@ -55,6 +55,18 @@ pub async fn stage_files(path: String, files: Vec<String>) -> Result<(), GitErro
 #[tauri::command]
 pub async fn unstage_files(path: String, files: Vec<String>) -> Result<(), GitError> {
     run(move || git::unstage_files(&PathBuf::from(path), &files)).await
+}
+
+/// Validates selected hunks of a file ("valider ce hunk") — partial staging.
+#[tauri::command]
+pub async fn stage_partial(path: String, file: String, selection: Vec<HunkSelection>) -> Result<(), GitError> {
+    run(move || git::stage_partial(&PathBuf::from(path), &file, &selection)).await
+}
+
+/// Un-validates selected staged hunks of a file ("renvoyer ce hunk en review").
+#[tauri::command]
+pub async fn unstage_partial(path: String, file: String, selection: Vec<HunkSelection>) -> Result<(), GitError> {
+    run(move || git::unstage_partial(&PathBuf::from(path), &file, &selection)).await
 }
 
 /// Runs a blocking git operation on the blocking pool, flattening a join panic

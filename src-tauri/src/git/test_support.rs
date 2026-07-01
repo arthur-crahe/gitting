@@ -55,6 +55,25 @@ impl TempRepo {
         self.git(&["commit", "-m", message]);
     }
 
+    /// The staged (index) blob bytes for `rel` — `git cat-file blob :rel`. Used
+    /// to assert byte-for-byte what partial staging wrote to the index.
+    pub fn index_blob(&self, rel: &str) -> Vec<u8> {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(self.dir.path())
+            .args(["cat-file", "blob", &format!(":{rel}")])
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .output()
+            .expect("spawn git cat-file");
+        assert!(
+            output.status.success(),
+            "git cat-file blob :{rel} failed: {}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+        output.stdout
+    }
+
     /// Runs a `git` subcommand in the repository, asserting it succeeds.
     pub fn git(&self, args: &[&str]) {
         let output = Command::new("git")

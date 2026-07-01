@@ -50,6 +50,8 @@ pub fn run() {
             commands::unstage_file,
             commands::stage_files,
             commands::unstage_files,
+            commands::stage_partial,
+            commands::unstage_partial,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -87,6 +87,14 @@ fn staged_file(
     change: Change,
     null: ObjectId,
 ) -> Result<DiffFile, GitError> {
+    let (path, kind, old, new) = staged_sides(change);
+    assemble(repo, cache, path, kind, old, new, null)
+}
+
+/// Extracts a staged change's path, [`ChangeKind`] and old/new blob sides —
+/// shared by [`staged_file`] and [`diff_one`], so the single-file path re-derives
+/// the sides identically to the full-section walk.
+fn staged_sides(change: Change) -> (String, ChangeKind, Option<Blob>, Option<Blob>) {
     let kind = staged_kind(&change);
     // The kind comes from the shared classifier above; this match only extracts
     // each variant's path and its old/new blob sides for the diff pipeline.
@@ -136,7 +144,7 @@ fn staged_file(
             Some((id.into_owned(), entry_mode)),
         ),
     };
-    assemble(repo, cache, path, kind, old, new, null)
+    (path, kind, old, new)
 }
 
 /// Lowers one unstaged change (index → worktree) into a [`DiffFile`], or `None`
@@ -345,6 +353,100 @@ fn octal_mode(mode: EntryMode) -> Option<String> {
         EntryKind::Commit => "160000",
     };
     Some(octal.to_owned())
+}
+
+/// One file's fresh diff plus the object ids of its two sides — the input to
+/// partial (hunk) staging. `new_id` is `None` in the unstaged section, where the
+/// new side is the worktree file read from disk rather than a stored blob.
+pub(super) struct FileSides {
+    /// The fresh per-file diff, byte-identical to what the panel renders.
+    pub file: DiffFile,
+    /// Object id of the old side (index blob when staging, `HEAD` blob when
+    /// unstaging), or `None` when that side is absent.
+    pub old_id: Option<ObjectId>,
+    /// Object id of the new side (the index blob when unstaging), or `None` in the
+    /// unstaged section where the new side is the worktree file.
+    pub new_id: Option<ObjectId>,
+}
+
+/// Re-diffs a single `file` in one section — the staged section (HEAD-tree →
+/// index) when `staged`, else the unstaged one (index → worktree) — returning its
+/// fresh [`DiffFile`] and the object ids of its two sides. The status walk
+/// short-circuits once the file matches, so the expensive blob diff runs for that
+/// one file only. `None` if the file is not currently changed in that section.
+pub(super) fn diff_one(path: &Path, file: &str, staged: bool) -> Result<Option<FileSides>, GitError> {
+    let repo = super::repo::discover(path)?;
+    let null = ObjectId::null(repo.object_hash());
+
+    if staged {
+        let mut cache = repo
+            .diff_resource_cache(Mode::ToGit, WorktreeRoots::default())
+            .map_err(|e| GitError::Diff(e.to_string()))?;
+        for item in status_iter(&repo)? {
+            if let status::Item::TreeIndex(change) = item? {
+                let (p, kind, old, new) = staged_sides(change);
+                if p != file {
+                    continue;
+                }
+                let df = assemble(&repo, &mut cache, p, kind, old, new, null)?;
+                return Ok(Some(FileSides {
+                    old_id: old.map(|(id, _)| id),
+                    new_id: new.map(|(id, _)| id),
+                    file: df,
+                }));
+            }
+        }
+        return Ok(None);
+    }
+
+    let workdir = repo.workdir().ok_or(GitError::Bare)?.to_owned();
+    let mut cache = repo
+        .diff_resource_cache(
+            Mode::ToWorktreeAndBinaryToText,
+            WorktreeRoots { old_root: None, new_root: Some(workdir) },
+        )
+        .map_err(|e| GitError::Diff(e.to_string()))?;
+    for item in status_iter(&repo)? {
+        let status::Item::IndexWorktree(wt) = item? else {
+            continue;
+        };
+        match wt {
+            WorktreeItem::Modification { entry, rela_path, status, .. } => {
+                let p = path_string(&rela_path);
+                if p != file {
+                    continue;
+                }
+                let Some(kind) = worktree_kind(status) else {
+                    return Ok(None);
+                };
+                // A conflict or type change has no line diff to stage partially;
+                // carry it hunkless so the caller rejects it on `change_kind`.
+                if matches!(kind, ChangeKind::Conflict | ChangeKind::TypeChange) {
+                    return Ok(Some(FileSides { file: notice(p, kind), old_id: None, new_id: None }));
+                }
+                let old = Some((entry.id, entry.mode));
+                let df = assemble(&repo, &mut cache, p, kind, old, None, null)?;
+                return Ok(Some(FileSides { old_id: old.map(|(id, _)| id), new_id: None, file: df }));
+            }
+            WorktreeItem::DirectoryContents { entry, .. } => {
+                let p = path_string(&entry.rela_path);
+                if p != file {
+                    continue;
+                }
+                // Untracked (all-additions) — non-Modified; the caller degrades it
+                // to whole-file staging, so a hunkless notice carries the kind.
+                return Ok(Some(FileSides { file: notice(p, ChangeKind::Untracked), old_id: None, new_id: None }));
+            }
+            WorktreeItem::Rewrite { dirwalk_entry, .. } => {
+                let p = path_string(&dirwalk_entry.rela_path);
+                if p != file {
+                    continue;
+                }
+                return Ok(Some(FileSides { file: notice(p, ChangeKind::Renamed), old_id: None, new_id: None }));
+            }
+        }
+    }
+    Ok(None)
 }
 
 #[cfg(test)]

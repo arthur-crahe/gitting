@@ -35,6 +35,14 @@ pub fn unstage_files(path: &Path, files: &[String]) -> Result<(), GitError> {
     GitCli::default().unstage_many(&workdir(path)?, files)
 }
 
+/// Applies a synthesized unified-diff `patch` to the index via `git apply
+/// --cached` (with `--reverse` to unstage) — the primitive behind partial
+/// (hunk/line) staging. The apply is atomic, so a rejected patch leaves the
+/// index untouched; byte-faithful, so the staged blob keeps the reviewed bytes.
+pub fn apply_partial_patch(path: &Path, patch: &[u8], reverse: bool) -> Result<(), GitError> {
+    GitCli::default().apply_partial(&workdir(path)?, patch, reverse)
+}
+
 /// The working-tree root of the repository enclosing `path`.
 fn workdir(path: &Path) -> Result<std::path::PathBuf, GitError> {
     Ok(super::repo::discover(path)?
@@ -140,24 +148,87 @@ impl GitCli {
     /// Runs `git -C <root> <args…>`, mapping a missing binary, a spawn failure
     /// or a non-zero exit to a [`GitError::Index`] carrying a usable message.
     fn exec(&self, root: &Path, args: &[&str]) -> Result<(), GitError> {
-        let output = git_command(&self.program).arg("-C").arg(root).args(args).output();
-        let output = match output {
-            Ok(output) => output,
-            // The only place the app needs an installed `git`; say so plainly.
-            Err(e) if e.kind() == ErrorKind::NotFound => {
-                return Err(GitError::Index(
-                    "git introuvable : la validation nécessite git installé".into(),
-                ))
-            }
-            Err(e) => return Err(GitError::Index(e.to_string())),
-        };
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(GitError::Index(
-                String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-            ))
+        let output = git_command(&self.program).arg("-C").arg(root).args(args).output().map_err(map_spawn_err)?;
+        map_exit(output)
+    }
+
+    /// Runs `git -C <root> <args…>` feeding `patch` on the child's stdin (for
+    /// `git apply -`). The patch is written from a dedicated thread that swallows
+    /// a broken-pipe / write error: a child that rejects the patch and exits
+    /// before draining stdin must still surface git's real stderr, not a spurious
+    /// write failure. stdout/stderr are drained on this thread, so a patch of any
+    /// size streams without deadlock.
+    fn exec_stdin(&self, root: &Path, args: &[&str], patch: &[u8]) -> Result<(), GitError> {
+        use std::io::Write;
+        use std::process::Stdio;
+
+        let mut child = git_command(&self.program)
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(map_spawn_err)?;
+
+        let mut stdin = child.stdin.take().expect("stdin was piped");
+        let payload = patch.to_vec();
+        let writer = std::thread::spawn(move || {
+            let _ = stdin.write_all(&payload);
+            let _ = stdin.flush();
+            // `stdin` drops here, closing the pipe so git reads EOF.
+        });
+
+        let output = child.wait_with_output().map_err(|e| GitError::Index(e.to_string()))?;
+        let _ = writer.join();
+        map_exit(output)
+    }
+
+    /// Applies `patch` to the index — a single, atomic `git apply --cached`
+    /// (`--reverse` to unstage). `--recount` tolerates the hunk header's original
+    /// counts; `core.autocrlf`/`safecrlf` are forced off and `--whitespace=nowarn`
+    /// is set so git never rewrites the reviewed bytes; the staged blob is exactly
+    /// what was synthesized.
+    fn apply_partial(&self, root: &Path, patch: &[u8], reverse: bool) -> Result<(), GitError> {
+        let mut args: Vec<&str> = vec![
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.safecrlf=false",
+            "apply",
+            "--cached",
+            "--whitespace=nowarn",
+            "--recount",
+        ];
+        if reverse {
+            args.push("--reverse");
         }
+        args.push("-");
+        self.exec_stdin(root, &args, patch)
+    }
+}
+
+/// Maps a process spawn failure to a usable [`GitError`], naming the one
+/// dependency the app needs installed when the binary itself is missing.
+fn map_spawn_err(e: std::io::Error) -> GitError {
+    if e.kind() == ErrorKind::NotFound {
+        // The only place the app needs an installed `git`; say so plainly.
+        GitError::Index("git introuvable : la validation nécessite git installé".into())
+    } else {
+        GitError::Index(e.to_string())
+    }
+}
+
+/// Maps a finished process to `Ok` on success, or a [`GitError::Index`] carrying
+/// git's trimmed stderr on a non-zero exit.
+fn map_exit(output: std::process::Output) -> Result<(), GitError> {
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(GitError::Index(
+            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        ))
     }
 }
 
@@ -168,13 +239,16 @@ fn reject_unsafe_path(args: &[&str]) -> Result<(), GitError> {
 }
 
 /// Rejects anything that is not a single in-tree path: an empty argument, an
-/// absolute path, a `.` (which would target the whole worktree), or a `..`
-/// escape. The paths always come from our own status list, so this only guards
-/// against a malformed IPC argument.
-fn reject_unsafe_str(raw: &str) -> Result<(), GitError> {
+/// absolute path, a `.` (which would target the whole worktree), a `..` escape,
+/// or a control byte (`\0`, `\n`, `\r`, `\t`, …). The paths always come from our
+/// own status list, so this only guards against a malformed IPC argument — and,
+/// for partial staging, against a path that would be written into the synthesized
+/// patch header, where a newline could inject spurious patch lines.
+pub(super) fn reject_unsafe_str(raw: &str) -> Result<(), GitError> {
     let file = Path::new(raw);
     let unsafe_path = raw.is_empty()
         || file.is_absolute()
+        || raw.bytes().any(|b| b < 0x20 || b == 0x7f)
         || file.components().any(|c| {
             matches!(c, std::path::Component::ParentDir | std::path::Component::CurDir)
         });
