@@ -4,6 +4,12 @@ Notes de version de Gitting, de la plus récente à la plus ancienne, à destina
 
 <!-- release:anchor — /release inserts the new version section directly below this line -->
 
+## [0.9.0] - 2026-07-01
+
+### Nouveautés
+- Actions directes au survol d'un bloc ou d'une ligne, appliquées au clic : **Valider** ou **Rejeter** (rejeter annule la modification dans le fichier) côté À reviewer, **Annuler** côté Validé — plus besoin de sélectionner puis valider.
+- Le rejet d'une ligne agit sur tout son bloc de changement, donc l'ancienne et la nouvelle version d'une ligne modifiée sont traitées ensemble.
+
 ## [0.8.0] - 2026-07-01
 
 ### Nouveautés
