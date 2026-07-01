@@ -15,7 +15,7 @@
 use std::path::Path;
 
 use super::diff::diff_one;
-use super::hunk_patch::{file_header, hunk_block, hunk_fingerprint, raw_lines};
+use super::hunk_patch::{file_header, hunk_block, hunk_fingerprint, raw_lines, PatchShape};
 use super::index_write::{apply_partial_patch, reject_unsafe_str};
 use super::{ChangeKind, GitError, Hunk, HunkSelection};
 
@@ -44,19 +44,22 @@ fn apply_selection(path: &Path, file: &str, selection: &[HunkSelection], reverse
     if selection.is_empty() {
         return Ok(());
     }
-    // Line-level granularity is v2: a selection scoped to individual lines is not
-    // yet honored (v1 always stages the whole hunk).
-    if selection.iter().any(|s| s.lines.is_some()) {
-        return Err(GitError::Index("staging par ligne pas encore disponible".into()));
-    }
 
     let sides = diff_one(path, file, reverse)?
         .ok_or_else(|| GitError::Index(format!("fichier absent du diff : {file}")))?;
-    if !matches!(sides.file.change_kind, ChangeKind::Modified) {
-        return Err(GitError::Index(
-            "staging partiel réservé aux fichiers modifiés — le reste se valide en entier".into(),
-        ));
-    }
+    // A modified file is patched in place; a new (untracked) file is created in the
+    // index from `/dev/null` with just its selected lines. Everything else
+    // (binary, submodule, conflict, type-change, rename, added, deleted) stays
+    // whole-file — the caller degrades to `stage_file`/`unstage_file`.
+    let shape = match sides.file.change_kind {
+        ChangeKind::Modified => PatchShape::Modify,
+        ChangeKind::Untracked if !reverse => PatchShape::Create,
+        _ => {
+            return Err(GitError::Index(
+                "staging partiel réservé aux fichiers modifiés ou nouveaux — le reste se valide en entier".into(),
+            ))
+        }
+    };
 
     let repo = super::repo::discover(path)?;
     let workdir = repo.workdir().ok_or(GitError::Bare)?.to_owned();
@@ -80,11 +83,13 @@ fn apply_selection(path: &Path, file: &str, selection: &[HunkSelection], reverse
     order.sort_by_key(|s| s.hunk);
     order.dedup_by_key(|s| s.hunk);
 
-    let mut patch = file_header(&sides.file, old_hex.as_deref(), new_hex.as_deref());
+    let mut patch = file_header(&sides.file, old_hex.as_deref(), new_hex.as_deref(), shape);
     for sel in order {
         let hunk = sides.file.hunks.get(sel.hunk as usize).ok_or_else(stale)?;
         verify(hunk, sel)?;
-        patch.extend(hunk_block(hunk, &raw_old, &raw_new, reverse).ok_or_else(stale)?);
+        // `lines: None` stages the whole hunk (v1); a subset selects those lines (v2).
+        let block = hunk_block(hunk, &raw_old, &raw_new, reverse, sel.lines.as_deref()).ok_or_else(stale)?;
+        patch.extend(block);
     }
     apply_partial_patch(path, &patch, reverse)
 }
@@ -115,7 +120,9 @@ fn read_blob(repo: &gix::Repository, id: Option<gix::ObjectId>) -> Result<Vec<u8
 mod tests {
     use super::{hunk_fingerprint, stage_partial, unstage_partial};
     use crate::git::test_support::TempRepo;
-    use crate::git::{diff_staged, diff_unstaged, read_status, DiffFile, GitError, HunkSelection};
+    use crate::git::{
+        diff_staged, diff_unstaged, read_status, DiffFile, DiffLineKind, GitError, Hunk, HunkSelection,
+    };
 
     /// A twenty-line file whose lines 2 and 19 are edited, forcing two separate
     /// hunks (the edits are more than `2 * context` lines apart).
@@ -145,6 +152,24 @@ mod tests {
             fingerprint: hunk_fingerprint(h),
             lines: None,
         }
+    }
+
+    /// A five-line file with two changes (b→B, d→D) that share a single hunk, so a
+    /// line-subset selection can keep one and leave the other.
+    fn two_change_repo() -> TempRepo {
+        let repo = TempRepo::init();
+        repo.write("f.txt", "a\nb\nc\nd\ne\n");
+        repo.stage("f.txt");
+        repo.commit("seed");
+        repo.write("f.txt", "a\nB\nc\nD\ne\n");
+        repo
+    }
+
+    /// The line indices of the first change (its delete + its add) within a hunk.
+    fn first_change_lines(hunk: &Hunk) -> Vec<u32> {
+        let del = hunk.lines.iter().position(|l| matches!(l.kind, DiffLineKind::Delete)).expect("a delete");
+        let add = hunk.lines.iter().position(|l| matches!(l.kind, DiffLineKind::Add)).expect("an add");
+        vec![del as u32, add as u32]
     }
 
     #[test]
@@ -190,6 +215,39 @@ mod tests {
     }
 
     #[test]
+    fn staging_selected_lines_stages_only_those_changes() {
+        let repo = two_change_repo();
+        let unstaged = diff_unstaged(repo.path()).expect("diff");
+        let file = unstaged.iter().find(|f| f.path == "f.txt").expect("f.txt");
+        assert_eq!(file.hunks.len(), 1, "the two changes share one hunk");
+
+        let mut sel = selection_for(file, 0);
+        sel.lines = Some(first_change_lines(&file.hunks[0]));
+        stage_partial(repo.path(), "f.txt", &[sel]).expect("stage selected lines");
+
+        // Only b→B is staged; d stays unchanged in the index.
+        assert_eq!(repo.index_blob("f.txt"), b"a\nB\nc\nd\ne\n");
+        let status = read_status(repo.path()).expect("status");
+        assert!(status.staged.iter().any(|e| e.path == "f.txt"));
+        assert!(status.unstaged.iter().any(|e| e.path == "f.txt"), "d→D remains to review");
+    }
+
+    #[test]
+    fn unstaging_selected_lines_reverts_only_those_changes() {
+        let repo = two_change_repo();
+        repo.stage("f.txt"); // stage the whole file: index = a B c D e
+        let staged = diff_staged(repo.path()).expect("diff");
+        let file = staged.iter().find(|f| f.path == "f.txt").expect("f.txt");
+
+        let mut sel = selection_for(file, 0);
+        sel.lines = Some(first_change_lines(&file.hunks[0]));
+        unstage_partial(repo.path(), "f.txt", &[sel]).expect("unstage selected lines");
+
+        // Only b→B is reverted in the index; d→D stays staged.
+        assert_eq!(repo.index_blob("f.txt"), b"a\nb\nc\nD\ne\n");
+    }
+
+    #[test]
     fn a_content_reedit_with_the_same_tuple_is_rejected() {
         let repo = two_hunk_repo();
         let unstaged = diff_unstaged(repo.path()).expect("diff");
@@ -206,26 +264,57 @@ mod tests {
         assert!(read_status(repo.path()).expect("status").staged.is_empty());
     }
 
-    #[test]
-    fn an_untracked_file_is_rejected_for_partial_staging() {
+    /// A committed seed plus a brand-new untracked `new.txt` of three lines.
+    fn untracked_repo() -> TempRepo {
         let repo = TempRepo::init();
         repo.write("seed.txt", "s\n");
         repo.stage("seed.txt");
         repo.commit("seed");
-        repo.write("new.txt", "x\ny\n");
+        repo.write("new.txt", "x\ny\nz\n");
+        repo
+    }
 
-        let sel = HunkSelection {
-            hunk: 0,
-            old_start: 0,
-            old_lines: 0,
-            new_start: 1,
-            new_lines: 2,
-            fingerprint: "0".into(),
-            lines: None,
-        };
-        let err = stage_partial(repo.path(), "new.txt", &[sel]).expect_err("must reject");
+    #[test]
+    fn staging_a_whole_untracked_hunk_creates_the_file_in_the_index() {
+        let repo = untracked_repo();
+        let unstaged = diff_unstaged(repo.path()).expect("diff");
+        let file = unstaged.iter().find(|f| f.path == "new.txt").expect("new.txt");
+        assert!(matches!(file.change_kind, crate::git::ChangeKind::Untracked));
+
+        stage_partial(repo.path(), "new.txt", &[selection_for(file, 0)]).expect("stage untracked");
+        assert_eq!(repo.index_blob("new.txt"), b"x\ny\nz\n");
+    }
+
+    #[test]
+    fn staging_selected_lines_of_an_untracked_file_creates_a_partial_blob() {
+        let repo = untracked_repo();
+        let unstaged = diff_unstaged(repo.path()).expect("diff");
+        let file = unstaged.iter().find(|f| f.path == "new.txt").expect("new.txt");
+
+        // Select only the first added line: the index gets a new file with just it.
+        let mut sel = selection_for(file, 0);
+        sel.lines = Some(vec![0]);
+        stage_partial(repo.path(), "new.txt", &[sel]).expect("stage first line");
+
+        assert_eq!(repo.index_blob("new.txt"), b"x\n");
+        let status = read_status(repo.path()).expect("status");
+        assert!(status.staged.iter().any(|e| e.path == "new.txt"), "x is staged");
+        assert!(status.unstaged.iter().any(|e| e.path == "new.txt"), "y and z remain to review");
+    }
+
+    #[test]
+    fn a_deleted_file_is_rejected_for_partial_staging() {
+        let repo = TempRepo::init();
+        repo.write("f.txt", "a\nb\n");
+        repo.stage("f.txt");
+        repo.commit("seed");
+        repo.remove("f.txt");
+
+        let unstaged = diff_unstaged(repo.path()).expect("diff");
+        let file = unstaged.iter().find(|f| f.path == "f.txt").expect("f.txt");
+        let err = stage_partial(repo.path(), "f.txt", &[selection_for(file, 0)]).expect_err("reject");
         let GitError::Index(message) = err else { panic!("expected Index error") };
-        assert!(message.contains("réservé aux fichiers modifiés"), "got: {message}");
+        assert!(message.contains("réservé aux fichiers modifiés ou nouveaux"), "got: {message}");
     }
 
     #[test]

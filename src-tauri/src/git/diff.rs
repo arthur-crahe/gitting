@@ -433,9 +433,18 @@ pub(super) fn diff_one(path: &Path, file: &str, staged: bool) -> Result<Option<F
                 if p != file {
                     continue;
                 }
-                // Untracked (all-additions) — non-Modified; the caller degrades it
-                // to whole-file staging, so a hunkless notice carries the kind.
-                return Ok(Some(FileSides { file: notice(p, ChangeKind::Untracked), old_id: None, new_id: None }));
+                if !matches!(entry.status, gix::dir::entry::Status::Untracked) {
+                    return Ok(None);
+                }
+                // Only a regular untracked file has a blob the pipeline can open; a
+                // directory/symlink/non-regular entry stays hunkless (the caller
+                // then degrades it to whole-file staging).
+                if !matches!(entry.disk_kind, Some(gix::dir::entry::Kind::File)) {
+                    return Ok(Some(FileSides { file: notice(p, ChangeKind::Untracked), old_id: None, new_id: None }));
+                }
+                // old absent (empty → a creation patch); new = the worktree file.
+                let df = assemble(&repo, &mut cache, p, ChangeKind::Untracked, None, None, null)?;
+                return Ok(Some(FileSides { file: df, old_id: None, new_id: None }));
             }
             WorktreeItem::Rewrite { dirwalk_entry, .. } => {
                 let p = path_string(&dirwalk_entry.rela_path);

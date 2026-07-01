@@ -14,6 +14,8 @@
 //! arithmetic runs. Line-level selection and the count-recomputing transform are
 //! a later step.
 
+use std::collections::HashSet;
+
 use super::{DiffFile, DiffLineKind, Hunk};
 
 /// FNV-1a (64-bit) offset basis.
@@ -106,16 +108,41 @@ pub(super) fn quoted_path(prefix: &str, path: &str) -> String {
     out
 }
 
-/// Emits the per-file patch preamble — `diff --git`, `old mode`/`new mode` lines
-/// when the mode changed (so the mode stages with the first hunk, never orphaned),
-/// an `index <old>..<new>[ <mode>]` line when both object ids are known, and the
-/// `---`/`+++` lines — shared by every hunk of `file`. Paths are c-quoted like
+/// The shape of the file-level patch preamble.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum PatchShape {
+    /// Both sides exist — a content and/or mode change.
+    Modify,
+    /// The old side is `/dev/null` — a new file, whose lines are all additions
+    /// (staging a subset still creates the file in the index with just those lines).
+    Create,
+}
+
+/// Emits the per-file patch preamble shared by every hunk of `file`. For
+/// [`PatchShape::Modify`]: `diff --git`, `old mode`/`new mode` when the mode
+/// changed (so the mode stages with the first hunk, never orphaned), an `index
+/// <old>..<new>[ <mode>]` line when both object ids are known, and `---`/`+++`.
+/// For [`PatchShape::Create`]: `new file mode <mode>` and a `--- /dev/null` old
+/// side, so `git apply --cached` creates the index entry. Paths are c-quoted like
 /// `git`'s own output so `git apply` parses them back exactly.
-pub(super) fn file_header(file: &DiffFile, old_oid: Option<&str>, new_oid: Option<&str>) -> Vec<u8> {
+pub(super) fn file_header(
+    file: &DiffFile,
+    old_oid: Option<&str>,
+    new_oid: Option<&str>,
+    shape: PatchShape,
+) -> Vec<u8> {
     let a = quoted_path("a/", &file.path);
     let b = quoted_path("b/", &file.path);
     let mut buf: Vec<u8> = Vec::new();
     extend(&mut buf, &format!("diff --git {a} {b}\n"));
+
+    if shape == PatchShape::Create {
+        let mode = file.new_mode.as_deref().unwrap_or("100644");
+        extend(&mut buf, &format!("new file mode {mode}\n"));
+        extend(&mut buf, "--- /dev/null\n");
+        extend(&mut buf, &format!("+++ {b}\n"));
+        return buf;
+    }
 
     match (file.old_mode.as_deref(), file.new_mode.as_deref()) {
         (Some(om), Some(nm)) if om != nm => {
@@ -137,45 +164,94 @@ pub(super) fn file_header(file: &DiffFile, old_oid: Option<&str>, new_oid: Optio
     buf
 }
 
-/// Emits one hunk's `@@` header — reproduced **verbatim** from `hunk` (`git apply
-/// --recount` recomputes the counts, and `gix`'s starts are already the index-side
-/// positions, correct for a forward *and* a reverse apply) — and its body.
+/// Emits one hunk's `@@` header and body for a stage (or, with `reverse`,
+/// unstage) apply. `selected` is `None` for the whole hunk (v1) or the indices
+/// (into `hunk.lines`) of the changed lines to include (v2 line-level); context
+/// lines are always kept.
 ///
-/// Each body line copies its raw bytes: a deleted line from `raw_old`, an added
-/// line from `raw_new`, a context line from whichever side is the **index** (old
-/// when forward, new when reverse) so the apply pre-image always matches. A `\ No
-/// newline at end of file` marker follows any line whose raw bytes lack a trailing
-/// `\n`. Returns `None` for an empty hunk or a line number outside its raw stream
-/// (a stale selection), so no malformed patch ever reaches `git`.
-pub(super) fn hunk_block(hunk: &Hunk, raw_old: &[&[u8]], raw_new: &[&[u8]], reverse: bool) -> Option<Vec<u8>> {
+/// Each kept line copies its **raw** bytes — a deleted line from `raw_old`, an
+/// added line from `raw_new`, a context line from whichever side is the **index**
+/// (old when forward, new when reverse) so the apply pre-image always matches. A
+/// line the user did NOT select is neutralized in a direction-aware way so only
+/// the chosen change lands:
+/// - forward: an unselected `+` is **dropped** (stays in the worktree only); an
+///   unselected `-` becomes **context** (the line is not removed from the index);
+/// - reverse: mirrored — an unselected `-` is **dropped** (stays removed in the
+///   index); an unselected `+` becomes **context** (the line stays staged).
+///
+/// The `@@` counts are recomputed from the emitted body (a zero-length side gets
+/// start `0`); a `\ No newline at end of file` marker follows any line whose raw
+/// bytes lack a trailing `\n`. Returns `None` when the effective selection carries
+/// no change (all context), the hunk is empty, or a line number falls outside its
+/// raw stream (a stale selection) — so no malformed or no-op patch reaches `git`.
+pub(super) fn hunk_block(
+    hunk: &Hunk,
+    raw_old: &[&[u8]],
+    raw_new: &[&[u8]],
+    reverse: bool,
+    selected: Option<&[u32]>,
+) -> Option<Vec<u8>> {
     if hunk.lines.is_empty() {
         return None;
     }
-    let mut buf: Vec<u8> = Vec::new();
-    extend(
-        &mut buf,
-        &format!(
-            "@@ -{},{} +{},{} @@\n",
-            hunk.old_start, hunk.old_lines, hunk.new_start, hunk.new_lines
-        ),
-    );
+    let chosen: Option<HashSet<u32>> = selected.map(|s| s.iter().copied().collect());
+    let is_selected = |index: usize| chosen.as_ref().is_none_or(|s| s.contains(&(index as u32)));
 
-    for line in &hunk.lines {
-        let (sign, raw) = match line.kind {
+    // (sign, raw-bytes) per emitted body line, then the recomputed counts.
+    let mut body: Vec<(u8, &[u8])> = Vec::new();
+    let mut old_count = 0u32;
+    let mut new_count = 0u32;
+    let mut has_change = false;
+
+    for (index, line) in hunk.lines.iter().enumerate() {
+        match line.kind {
             DiffLineKind::Context => {
                 let no = if reverse { line.new_no } else { line.old_no }?;
-                let src = if reverse { raw_new } else { raw_old };
-                (b' ', *src.get((no as usize).checked_sub(1)?)?)
+                let raw = *(if reverse { raw_new } else { raw_old }).get((no as usize).checked_sub(1)?)?;
+                body.push((b' ', raw));
+                old_count += 1;
+                new_count += 1;
             }
             DiffLineKind::Delete => {
-                let no = line.old_no?;
-                (b'-', *raw_old.get((no as usize).checked_sub(1)?)?)
+                let raw = *raw_old.get((line.old_no? as usize).checked_sub(1)?)?;
+                if is_selected(index) {
+                    body.push((b'-', raw));
+                    old_count += 1;
+                    has_change = true;
+                } else if !reverse {
+                    // Keep the line: not removed from the index this time.
+                    body.push((b' ', raw));
+                    old_count += 1;
+                    new_count += 1;
+                }
+                // reverse + unselected delete → drop (stays removed in the index).
             }
             DiffLineKind::Add => {
-                let no = line.new_no?;
-                (b'+', *raw_new.get((no as usize).checked_sub(1)?)?)
+                let raw = *raw_new.get((line.new_no? as usize).checked_sub(1)?)?;
+                if is_selected(index) {
+                    body.push((b'+', raw));
+                    new_count += 1;
+                    has_change = true;
+                } else if reverse {
+                    // Keep the line staged: it stays in the index.
+                    body.push((b' ', raw));
+                    old_count += 1;
+                    new_count += 1;
+                }
+                // forward + unselected add → drop (stays in the worktree only).
             }
-        };
+        }
+    }
+
+    if !has_change {
+        return None;
+    }
+
+    let old_start = if old_count == 0 { 0 } else { hunk.old_start };
+    let new_start = if new_count == 0 { 0 } else { hunk.new_start };
+    let mut buf: Vec<u8> = Vec::new();
+    extend(&mut buf, &format!("@@ -{old_start},{old_count} +{new_start},{new_count} @@\n"));
+    for (sign, raw) in body {
         buf.push(sign);
         buf.extend_from_slice(raw);
         if !raw.ends_with(b"\n") {
@@ -183,7 +259,6 @@ pub(super) fn hunk_block(hunk: &Hunk, raw_old: &[&[u8]], raw_new: &[&[u8]], reve
             buf.extend_from_slice(b"\\ No newline at end of file\n");
         }
     }
-
     Some(buf)
 }
 
@@ -194,7 +269,7 @@ fn extend(buf: &mut Vec<u8>, s: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{file_header, hunk_block, hunk_fingerprint, quoted_path, raw_lines};
+    use super::{file_header, hunk_block, hunk_fingerprint, quoted_path, raw_lines, PatchShape};
     use crate::git::index_write::apply_partial_patch;
     use crate::git::test_support::TempRepo;
     use crate::git::{ChangeKind, DiffFile, DiffLineKind, Hunk, Line};
@@ -211,8 +286,8 @@ mod tests {
         raw_new: &[&[u8]],
         reverse: bool,
     ) -> Option<Vec<u8>> {
-        let mut buf = file_header(file, old_oid, new_oid);
-        buf.extend(hunk_block(hunk, raw_old, raw_new, reverse)?);
+        let mut buf = file_header(file, old_oid, new_oid, PatchShape::Modify);
+        buf.extend(hunk_block(hunk, raw_old, raw_new, reverse, None)?);
         Some(buf)
     }
 
@@ -225,6 +300,27 @@ mod tests {
             new_mode: Some("100644".into()),
             is_binary: false,
             hunks: Vec::new(),
+        }
+    }
+
+    /// A hunk over a five-line file with TWO changes (b→B at index 1/2, d→D at
+    /// index 4/5), so a line-subset selection can keep one and neutralize the other.
+    fn two_change_hunk() -> Hunk {
+        use DiffLineKind::{Add, Context, Delete};
+        Hunk {
+            old_start: 1,
+            old_lines: 5,
+            new_start: 1,
+            new_lines: 5,
+            lines: vec![
+                Line { kind: Context, old_no: Some(1), new_no: Some(1), content: "a".into() },
+                Line { kind: Delete, old_no: Some(2), new_no: None, content: "b".into() },
+                Line { kind: Add, old_no: None, new_no: Some(2), content: "B".into() },
+                Line { kind: Context, old_no: Some(3), new_no: Some(3), content: "c".into() },
+                Line { kind: Delete, old_no: Some(4), new_no: None, content: "d".into() },
+                Line { kind: Add, old_no: None, new_no: Some(4), content: "D".into() },
+                Line { kind: Context, old_no: Some(5), new_no: Some(5), content: "e".into() },
+            ],
         }
     }
 
@@ -304,6 +400,72 @@ mod tests {
             String::from_utf8(patch).unwrap(),
             "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n\\ No newline at end of file\n",
         );
+    }
+
+    #[test]
+    fn hunk_block_forward_stages_only_selected_lines() {
+        let hunk = two_change_hunk();
+        let raw_old = raw_lines(b"a\nb\nc\nd\ne\n");
+        let raw_new = raw_lines(b"a\nB\nc\nD\ne\n");
+        // Keep the first change (indices 1,2); the second (d→D) is neutralized:
+        // its delete becomes context, its add is dropped.
+        let block = hunk_block(&hunk, &raw_old, &raw_new, false, Some(&[1, 2])).expect("block");
+        assert_eq!(
+            String::from_utf8(block).unwrap(),
+            "@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e\n",
+        );
+    }
+
+    #[test]
+    fn hunk_block_reverse_unstages_only_selected_lines() {
+        let hunk = two_change_hunk();
+        let raw_old = raw_lines(b"a\nb\nc\nd\ne\n"); // HEAD
+        let raw_new = raw_lines(b"a\nB\nc\nD\ne\n"); // index
+        // Reverse: the unselected add (d→D) becomes context so it stays staged;
+        // the unselected delete would be dropped (none here).
+        let block = hunk_block(&hunk, &raw_old, &raw_new, true, Some(&[1, 2])).expect("block");
+        assert_eq!(
+            String::from_utf8(block).unwrap(),
+            "@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n D\n e\n",
+        );
+    }
+
+    #[test]
+    fn creation_patch_uses_dev_null_and_new_file_mode() {
+        let file = DiffFile {
+            path: "new.txt".into(),
+            change_kind: ChangeKind::Untracked,
+            old_mode: None,
+            new_mode: Some("100644".into()),
+            is_binary: false,
+            hunks: Vec::new(),
+        };
+        let hunk = Hunk {
+            old_start: 0,
+            old_lines: 0,
+            new_start: 1,
+            new_lines: 2,
+            lines: vec![
+                Line { kind: DiffLineKind::Add, old_no: None, new_no: Some(1), content: "x".into() },
+                Line { kind: DiffLineKind::Add, old_no: None, new_no: Some(2), content: "y".into() },
+            ],
+        };
+        let raw_new = raw_lines(b"x\ny\n");
+        let mut patch = file_header(&file, None, None, PatchShape::Create);
+        patch.extend(hunk_block(&hunk, &[], &raw_new, false, None).expect("block"));
+        assert_eq!(
+            String::from_utf8(patch).unwrap(),
+            "diff --git a/new.txt b/new.txt\nnew file mode 100644\n--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1,2 @@\n+x\n+y\n",
+        );
+    }
+
+    #[test]
+    fn hunk_block_returns_none_when_no_change_is_selected() {
+        let hunk = two_change_hunk();
+        let raw_old = raw_lines(b"a\nb\nc\nd\ne\n");
+        let raw_new = raw_lines(b"a\nB\nc\nD\ne\n");
+        assert!(hunk_block(&hunk, &raw_old, &raw_new, false, Some(&[])).is_none());
+        assert!(hunk_block(&hunk, &raw_old, &raw_new, false, Some(&[0, 3, 6])).is_none());
     }
 
     #[test]
