@@ -13,13 +13,14 @@ Rust + Tauri 2. Entry split: `src/main.rs` is the thin binary (`app_lib::run()`)
 
 - `stage_file` → `git add -- <path>` (bulk: `stage_files`, chunked to stay under the platform arg limit)
 - `unstage_file` → `git restore --staged -- <path>` (bulk: `unstage_files`)
+- `stage_partial` / `unstage_partial` → a unified patch synthesized from the raw blob/worktree bytes, piped to a single atomic `git apply --cached [--reverse]` (hunk-level staging; the patch never comes from the newline/CR-stripped, UTF-8-lossy gix diff — see `hunk_patch` + `partial`).
 
 Keep this in one module behind a trait so it can swap to native `gix` once index mutation lands. Invoke `git` directly (no shell), validate paths, pass `--` before the path, and surface exit code/stderr as a structured error. Do **not** use `gix`'s `worktree-mutation` feature for staging — that is checkout/reset, not per-file index editing.
 
 ## Module layout
 
-- `git/` — gix layer: `repo` (open/discover), `status`, `diff` (per-file unstaged/staged hunks), `index_write` (the isolated shell-out), `error` (one `thiserror` enum, `serde::Serialize`).
-- `commands/` — Tauri commands, thin wrappers over `git/`: `open_repo`, `repo_status`, `diff_unstaged`, `diff_staged`, `stage_file`, `unstage_file`, `stage_files`, `unstage_files`. Async, owned `String` args, `Result<T, GitError>`. Registered via `generate_handler!` in `lib.rs`.
+- `git/` — gix layer: `repo` (open/discover), `status`, `diff` (per-file unstaged/staged hunks + `diff_one`), `hunk_patch` (pure patch synthesis + fingerprint), `partial` (hunk stage/unstage orchestration), `index_write` (the isolated shell-out + `apply_partial`), `error` (one `thiserror` enum, `serde::Serialize`).
+- `commands/` — Tauri commands, thin wrappers over `git/`: `open_repo`, `repo_status`, `diff_unstaged`, `diff_staged`, `stage_file`, `unstage_file`, `stage_files`, `unstage_files`, `stage_partial`, `unstage_partial`. Async, owned `String` args, `Result<T, GitError>`. Registered via `generate_handler!` in `lib.rs`.
 
 ## Notes
 
