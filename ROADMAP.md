@@ -26,6 +26,8 @@ lazygit, gitui). Tant que ces points manquent, Gitting perd le face-à-face sur 
   d'accepter le bon 90 % et de rejeter le scope-creep de l'agent.
   *Origine : ADR 0001 (staging fichier livré, hunk/ligne différé). Nécessite un backend de
   staging partiel (`git apply --cached`), au-delà de `index_write.rs` actuel.*
+  **Plan d'implémentation détaillé : [`docs/reference/partial-staging-plan.md`](docs/reference/partial-staging-plan.md)**
+  (hunk d'abord puis ligne ; patch synthétisé depuis les octets bruts — pas le diff gix qui strippe `\r`/`\n` ; questions ouvertes à trancher).
 - [ ] **Rejeter un hunk / une ligne** — discard/revert ciblé sur le working tree, le pendant
   « refus » du staging ; pour relire un agent, rejeter compte autant qu'accepter.
   *Écriture destructive sur le disque : prévoir une confirmation.*
